@@ -1,0 +1,18 @@
+name: Terraform Apply
+
+on:
+  workflow_dispatch:
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+      - name: Terraform Init
+        run: terraform -chdir=inventories/oci/dev/project1/vm1 init
+      - name: Terraform Apply
+        run: terraform -chdir=inventories/oci/dev/project1/vm1 apply -auto-approve

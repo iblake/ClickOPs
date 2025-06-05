@@ -1,0 +1,30 @@
+<form action="/launch" method="post">
+    <label>Provider:</label>
+    <select name="provider">
+        {% for p in providers %}
+            <option value="{{ p }}">{{ p }}</option>
+        {% endfor %}
+    </select>
+
+    <label>Environment:</label>
+    <select name="env">
+        {% for e in environments %}
+            <option value="{{ e }}">{{ e }}</option>
+        {% endfor %}
+    </select>
+
+    <label>Project:</label>
+    <input type="text" name="project" required>
+
+    <label>Machine:</label>
+    <input type="text" name="machine" required>
+
+    <label>Operation:</label>
+    <select name="operation">
+        {% for op in operations %}
+            <option value="{{ op.code }}">{{ op.label }}</option>
+        {% endfor %}
+    </select>
+
+    <button type="submit">Launch</button>
+</form>
