@@ -2,19 +2,18 @@
 <html lang="en" x-data="clickOpsApp()">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ClickOps Operation Launcher</title>
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Alpine.js CDN -->
+  <!-- Alpine.js -->
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <!-- marked.js para renderizar Markdown -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
-  <!-- Estilos extra opcionales (puedes ajustarlos) -->
   <style>
-    /* Una animación sencilla para el contenedor principal */
+    /* Animación sencilla para el contenedor principal */
     @keyframes fade-in {
       from { opacity: 0; transform: translateY(10px); }
       to   { opacity: 1; transform: translateY(0); }
@@ -152,7 +151,7 @@
     </div>
   </div>
 
-  <!-- Alpine.js componente -->
+  <!-- Alpine.js y la lógica del componente -->
   <script>
     function clickOpsApp() {
       return {
@@ -209,7 +208,6 @@
           document.getElementById("docsContent").innerHTML = marked.parse(data.content);
         },
         openConfirmModal() {
-          // Validar que todos los campos estén completos
           if (!this.provider || !this.environment || !this.project || !this.machine || !this.operation || !this.crq) {
             alert("Please fill out all fields before launching.");
             return;
@@ -217,25 +215,22 @@
           this.showModal = true;
         },
         async submitOperation() {
-          // Cerrar modal
           this.showModal = false;
-          // Enviar POST al backend
-          const payload = {
-            provider: this.provider,
-            environment: this.environment,
-            project: this.project,
-            machine: this.machine,
-            operation: this.operation,
-            crq: this.crq
-          };
+          const formData = new FormData();
+          formData.append("provider", this.provider);
+          formData.append("environment", this.environment);
+          formData.append("project", this.project);
+          formData.append("machine", this.machine);
+          formData.append("operation", this.operation);
+          formData.append("crq", this.crq);
+
           const res = await fetch("/launch", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
+            body: formData
           });
+
           if (res.ok) {
             alert("Operation submitted! Check your PR in GitHub.");
-            // Resetear formulario (opcional)
             this.provider = '';
             this.environment = '';
             this.project = '';
@@ -246,7 +241,6 @@
             this.projects = [];
             this.machines = [];
             document.getElementById("docsContent").innerHTML = '';
-            // Volver a cargar providers
             this.fetchProviders();
           } else {
             alert("There was a problem launching the operation.");
