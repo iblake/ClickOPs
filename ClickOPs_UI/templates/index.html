@@ -1,30 +1,265 @@
-<form action="/launch" method="post">
-    <label>Provider:</label>
-    <select name="provider">
-        {% for p in providers %}
-            <option value="{{ p }}">{{ p }}</option>
-        {% endfor %}
-    </select>
+<!DOCTYPE html>
+<html lang="en" x-data="clickOpsApp()">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ClickOps Operation Launcher</title>
 
-    <label>Environment:</label>
-    <select name="env">
-        {% for e in environments %}
-            <option value="{{ e }}">{{ e }}</option>
-        {% endfor %}
-    </select>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Alpine.js CDN -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <!-- marked.js para renderizar Markdown -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
-    <label>Project:</label>
-    <input type="text" name="project" required>
+  <!-- Estilos extra opcionales (puedes ajustarlos) -->
+  <style>
+    /* Una animación sencilla para el contenedor principal */
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in {
+      animation: fade-in 0.3s ease-out forwards;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
 
-    <label>Machine:</label>
-    <input type="text" name="machine" required>
+  <div class="bg-white rounded-xl shadow-lg w-full max-w-3xl fade-in overflow-hidden">
 
-    <label>Operation:</label>
-    <select name="operation">
-        {% for op in operations %}
-            <option value="{{ op.code }}">{{ op.label }}</option>
-        {% endfor %}
-    </select>
+    <!-- HEADER -->
+    <div class="bg-blue-600 px-6 py-4">
+      <h1 class="text-white text-xl font-semibold">🚀 ClickOps Operation Launcher</h1>
+    </div>
 
-    <button type="submit">Launch</button>
-</form>
+    <!-- CONTENIDO PRINCIPAL -->
+    <div class="p-6 space-y-6">
+
+      <!-- FORMULARIO -->
+      <form @submit.prevent="openConfirmModal" class="space-y-6">
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+          <!-- Provider -->
+          <div>
+            <label for="provider" class="block text-sm font-medium text-gray-700">Cloud Provider</label>
+            <select id="provider" x-model="provider" @change="onProviderChange"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+              <option value="" disabled selected>-- Select Provider --</option>
+              <template x-for="prov in providers" :key="prov">
+                <option :value="prov" x-text="prov"></option>
+              </template>
+            </select>
+          </div>
+
+          <!-- Environment -->
+          <div x-show="provider" x-cloak>
+            <label for="environment" class="block text-sm font-medium text-gray-700">Environment</label>
+            <select id="environment" x-model="environment" @change="onEnvironmentChange"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+              <option value="" disabled selected>-- Select Environment --</option>
+              <template x-for="env in environments" :key="env">
+                <option :value="env" x-text="env"></option>
+              </template>
+            </select>
+          </div>
+
+          <!-- Project -->
+          <div x-show="environment" x-cloak>
+            <label for="project" class="block text-sm font-medium text-gray-700">Project</label>
+            <select id="project" x-model="project" @change="onProjectChange"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+              <option value="" disabled selected>-- Select Project --</option>
+              <template x-for="proj in projects" :key="proj">
+                <option :value="proj" x-text="proj"></option>
+              </template>
+            </select>
+          </div>
+
+          <!-- Machine -->
+          <div x-show="project" x-cloak>
+            <label for="machine" class="block text-sm font-medium text-gray-700">Machine</label>
+            <select id="machine" x-model="machine"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+              <option value="" disabled selected>-- Select Machine --</option>
+              <template x-for="m in machines" :key="m">
+                <option :value="m" x-text="m"></option>
+              </template>
+            </select>
+          </div>
+
+          <!-- Operation -->
+          <div class="sm:col-span-2">
+            <label for="operation" class="block text-sm font-medium text-gray-700">Operation</label>
+            <select id="operation" x-model="operation" @change="loadDocs"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+              <option value="" disabled selected>-- Select Operation --</option>
+              <option value="OPS101_start_vm">Start VM</option>
+              <option value="OPS102_stop_vm">Stop VM</option>
+            </select>
+          </div>
+
+          <!-- CRQ -->
+          <div class="sm:col-span-2">
+            <label for="crq" class="block text-sm font-medium text-gray-700">CRQ (Change Request ID)</label>
+            <input type="text" id="crq" x-model="crq" placeholder="e.g. CRQ123456"
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                   required>
+          </div>
+        </div>
+
+        <!-- Documentation -->
+        <div x-show="operation" x-cloak>
+          <label class="block text-sm font-medium text-gray-700">Documentation</label>
+          <div id="docsContent" class="prose max-w-none bg-gray-50 p-4 rounded border"></div>
+        </div>
+
+        <!-- Botón Launch -->
+        <div class="flex justify-center">
+          <button type="submit"
+                  class="inline-flex items-center px-6 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition">
+            Launch Operation
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL DE CONFIRMACIÓN -->
+  <div x-show="showModal" x-cloak
+       class="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6 space-y-4 fade-in">
+      <h2 class="text-xl font-semibold text-gray-800">Confirm Operation</h2>
+      <div class="space-y-1 text-gray-700">
+        <p><strong>CRQ:</strong> <span x-text="crq"></span></p>
+        <p><strong>Provider:</strong> <span x-text="provider"></span></p>
+        <p><strong>Environment:</strong> <span x-text="environment"></span></p>
+        <p><strong>Project:</strong> <span x-text="project"></span></p>
+        <p><strong>Machine:</strong> <span x-text="machine"></span></p>
+        <p><strong>Operation:</strong> <span x-text="operation"></span></p>
+      </div>
+      <div class="flex justify-end space-x-4 pt-4">
+        <button @click="showModal = false"
+                class="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition">
+          Cancel
+        </button>
+        <button @click="submitOperation()"
+                class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
+          Confirm
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alpine.js componente -->
+  <script>
+    function clickOpsApp() {
+      return {
+        providers: [],
+        environments: [],
+        projects: [],
+        machines: [],
+        provider: '',
+        environment: '',
+        project: '',
+        machine: '',
+        operation: '',
+        crq: '',
+        showModal: false,
+
+        async fetchProviders() {
+          const res = await fetch('/api/providers');
+          this.providers = await res.json();
+        },
+        async onProviderChange() {
+          this.environment = '';
+          this.project = '';
+          this.machine = '';
+          this.environments = [];
+          this.projects = [];
+          this.machines = [];
+          if (!this.provider) return;
+          const res = await fetch(`/api/environments/${this.provider}`);
+          this.environments = await res.json();
+        },
+        async onEnvironmentChange() {
+          this.project = '';
+          this.machine = '';
+          this.projects = [];
+          this.machines = [];
+          if (!this.provider || !this.environment) return;
+          const res = await fetch(`/api/projects/${this.provider}/${this.environment}`);
+          this.projects = await res.json();
+        },
+        async onProjectChange() {
+          this.machine = '';
+          this.machines = [];
+          if (!this.provider || !this.environment || !this.project) return;
+          const res = await fetch(`/api/machines/${this.provider}/${this.environment}/${this.project}`);
+          this.machines = await res.json();
+        },
+        async loadDocs() {
+          if (!this.operation) {
+            document.getElementById("docsContent").innerHTML = '';
+            return;
+          }
+          const res = await fetch(`/api/docs/${this.operation}`);
+          const data = await res.json();
+          document.getElementById("docsContent").innerHTML = marked.parse(data.content);
+        },
+        openConfirmModal() {
+          // Validar que todos los campos estén completos
+          if (!this.provider || !this.environment || !this.project || !this.machine || !this.operation || !this.crq) {
+            alert("Please fill out all fields before launching.");
+            return;
+          }
+          this.showModal = true;
+        },
+        async submitOperation() {
+          // Cerrar modal
+          this.showModal = false;
+          // Enviar POST al backend
+          const payload = {
+            provider: this.provider,
+            environment: this.environment,
+            project: this.project,
+            machine: this.machine,
+            operation: this.operation,
+            crq: this.crq
+          };
+          const res = await fetch("/launch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          if (res.ok) {
+            alert("Operation submitted! Check your PR in GitHub.");
+            // Resetear formulario (opcional)
+            this.provider = '';
+            this.environment = '';
+            this.project = '';
+            this.machine = '';
+            this.operation = '';
+            this.crq = '';
+            this.environments = [];
+            this.projects = [];
+            this.machines = [];
+            document.getElementById("docsContent").innerHTML = '';
+            // Volver a cargar providers
+            this.fetchProviders();
+          } else {
+            alert("There was a problem launching the operation.");
+          }
+        },
+        init() {
+          this.fetchProviders();
+        }
+      }
+    }
+    document.addEventListener("alpine:init", () => {
+      Alpine.data("clickOpsApp", clickOpsApp);
+    });
+  </script>
+</body>
+</html>

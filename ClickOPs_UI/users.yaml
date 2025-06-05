@@ -1,0 +1,5 @@
+# ClickOPs_UI/users.yaml
+david:
+  password: 89e01536ac207279409d4de1e5253e01f4a1769e696db0d6062ca9b8f56767c8  # hash de 'mypassword'
+admin:
+  password: d033e22ae348aeb5660fc2140aec35850c4da997  # hash de 'admin'
