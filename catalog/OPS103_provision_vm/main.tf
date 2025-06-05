@@ -1,19 +1,24 @@
 # main.tf for DEP001_create_vm
 terraform {
+  backend "oci" {}
   required_providers {
     oci = {
       source  = "oracle/oci"
-      version = "~> 4.0"
+      version = ">= 5.0.0"
     }
   }
 }
 
-provider "oci" {
-  # Asume que usas tu ~/.oci/config y perfil "DEFAULT"
-  alias   = "default"
-  profile = var.profile
-  region  = var.region
+variable "oci_profile" {
+  description = "Profile name to use from ~/.oci/config"
+  type        = string
+  default     = "DEFAULT"
 }
+
+provider "oci" {
+  config_file_profile = var.oci_profile
+}
+
 
 variable "compartment_id" {
   description = "OCID of the compartment where the VM will be created"

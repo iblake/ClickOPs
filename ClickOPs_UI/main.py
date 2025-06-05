@@ -9,17 +9,16 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 import yaml
-import hashlib
 
 from ClickOPs_UI.auth import authenticate_user, create_session, get_current_user, logout_user
 
 app = FastAPI()
 
-# Montamos estáticos y templates
+# Montamos archivos estáticos y plantillas
 app.mount("/static", StaticFiles(directory="ClickOPs_UI/templates/static"), name="static")
 templates = Jinja2Templates(directory="ClickOPs_UI/templates")
 
-# Paths en el repositorio
+# Rutas dentro del repositorio
 REPO_ROOT    = Path(__file__).resolve().parent.parent      # Raíz del repo Git
 CATALOG_PATH = REPO_ROOT / "catalog"
 
@@ -52,7 +51,7 @@ def home(request: Request):
         return RedirectResponse(url="/login", status_code=303)
     return templates.TemplateResponse("index.html", {"request": request, "user": user})
 
-# --- ENDPOINTS DINÁMICOS PARA EL FORMULARIO ---
+# --- ENDPOINTS PARA EL FORMULARIO ---
 
 def get_subdirs(path: Path) -> list[str]:
     if not path.exists():
@@ -91,60 +90,68 @@ def read_docs(operation: str):
 # --- ENDPOINT PRINCIPAL PARA LANZAR LA OPERACIÓN ---
 
 @app.post("/launch")
-def launch(
+async def launch(
     request: Request,
     provider: str = Form(...),
     environment: str = Form(...),
     project: str = Form(...),
-    machine: str = Form(...),
+    machine: str | None = Form(None),         # Puede venir vacío en provisioning ADB
     operation: str = Form(...),
-    crq: str = Form(...)
+    crq: str = Form(...),
+    # Variables Terraform para Autonomous DB Free Tier
+    tf_compartment: str | None = Form(None),
+    tf_db_name: str | None = Form(None),
+    tf_admin_password: str | None = Form(None),
+    tf_db_workload: str | None = Form(None),
+    # Variables Ansible
+    ansible_extra_vars: str | None = Form(None),
+    ansible_limit: str | None = Form(None)
 ):
     """
-    1) Si operation contiene 'provision', copia el módulo Terraform a la carpeta de inventario,
-       crea terraform.tfvars.json y un run_terraform.txt para que el workflow de Terraform se ejecute.
-    2) Si operation es 'start' o 'stop', actualiza master.yml con Ansible import_playbook y crea PR.
+    1) Si 'operation' contiene 'provision', copiar el módulo Terraform al inventario,
+       crear terraform.tfvars.json con las variables de la Autonomous Database Free Tier
+       y dejar un marcador para Terraform.
+    2) Si 'operation' es de tipo 'start' o 'stop', actualizar master.yml con el import_playbook
+       correspondiente y crear un PR en GitHub.
     """
-
     user = get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=303)
 
-    # Ruta de la carpeta de inventario de esta VM
-    inv_path = REPO_ROOT / f"oe_01/{provider}/{environment}/{project}/{machine}"
-    inv_path.mkdir(parents=True, exist_ok=True)
-
-    # ––– CASO PROVISION VM (Terraform) –––
+    # ––– CASO PROVISION ADB FREE TIER (Terraform) –––
     if "provision" in operation:
-        # 1. Copiar módulo Terraform del catálogo
+        # a) Inventory path: oe_01/{provider}/{environment}/{project}/adb/{tf_db_name}
+        inv_path = REPO_ROOT / f"oe_01/{provider}/{environment}/{project}/adb/{tf_db_name}"
+        inv_path.mkdir(parents=True, exist_ok=True)
+
+        # b) Copiar módulo Terraform desde el catálogo
         src_tf_folder  = CATALOG_PATH / operation
         dest_tf_folder = inv_path / "terraform"
         shutil.copytree(src_tf_folder, dest_tf_folder, dirs_exist_ok=True)
 
-        # 2. Crear terraform.tfvars.json con variables de ejemplo (ajústalas a tu entorno)
+        # c) Crear terraform.tfvars.json con variables de ADB Free Tier
         tfvars = {
-            "compartment_id":      "ocid1.compartment.oc1..exampleuniqueID",
-            "availability_domain": "Uocm:EU-FRANKFURT-1-AD-1",
-            "subnet_id":           "ocid1.subnet.oc1..exampleuniqueID",
-            "image_id":            "ocid1.image.oc1..exampleuniqueID",
-            "shape":               "VM.Standard.E2.1.Micro",
-            "ssh_public_key":      "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD...",  # Tu clave real
-            "display_name":        machine,
-            "region":              "eu-frankfurt-1",
-            "profile":             "DEFAULT",
-            "output_vm_vars_path": str(inv_path / "vm_vars.yml")
+            "compartment_id":         tf_compartment or "ocid1.compartment.oc1..exampleuniqueID",
+            "db_name":                tf_db_name or f"{tf_db_name}",
+            "cpu_core_count":         1,
+            "data_storage_size_in_tbs": 1,
+            "admin_password":         tf_admin_password or "DefaultPassw0rd!",
+            "db_workload":            tf_db_workload or "OLTP",
+            "is_free_tier":           True,
+            "display_name":           tf_db_name or f"{project}-freeADB",
+            "license_model":          "LICENSE_INCLUDED"
         }
-        # Escribimos el JSON en terraform.tfvars.json
         with open(dest_tf_folder / "terraform.tfvars.json", "w") as f:
             yaml.dump(tfvars, f)
 
-        # 3. Crear marcador para que el workflow de Terraform lo detecte
+        # d) Crear marcador para que el pipeline de Terraform lo detecte
         (inv_path / "run_terraform.txt").write_text("run-do-terraform-apply")
 
-        # Redirigimos a la página principal
+        # e) Redirigir a la home
         return RedirectResponse(url="/", status_code=303)
 
     # ––– CASO START / STOP VM (Ansible) –––
+    # En este caso sí esperamos que 'machine' venga con un valor
     if "start" in operation:
         playbook_file = "start_vm.yml"
     elif "stop" in operation:
@@ -152,17 +159,21 @@ def launch(
     else:
         playbook_file = ""
 
+    # Guardar valores de ansible_extra_vars en un archivo extra_vars.yml, si se proporcionaron
+    if ansible_extra_vars:
+        try:
+            extra_dict = yaml.safe_load(ansible_extra_vars)  # JSON o YAML válido
+            inv_path_ansible = REPO_ROOT / f"oe_01/{provider}/{environment}/{project}/{machine}"
+            inv_path_ansible.mkdir(parents=True, exist_ok=True)
+            with open(inv_path_ansible / "extra_vars.yml", "w") as f:
+                yaml.dump(extra_dict, f)
+        except Exception:
+            pass  # Ignorar si no es un JSON/YAML válido
+
+    # Construir la línea de import_playbook que se añadirá a master.yml
     import_line = f"- import_playbook: catalog/{operation}/{playbook_file}\n"
 
-    # Aquí vendría tu lógica existente para:
-    #   a) Crear rama crq-<crq>
-    #   b) Actualizar master.yml con import_line
-    #   c) Git commit + push de la rama
-    #   d) gh pr create para abrir el PR hacia main
-    #
-    # (Este bloque no se muestra aquí para no repetirlo, pues ya lo tenías anteriormente.)
-
-    # Ejemplo simplificado (reemplaza con tu lógica real):
+    # Crear rama y hacer commit + push
     branch_name = f"crq-{crq}"
     os.chdir(str(REPO_ROOT))
     subprocess.run(["git", "checkout", "main"], check=True)
@@ -173,8 +184,8 @@ def launch(
     if not MASTER_FILE.exists():
         MASTER_FILE.write_text(import_line)
     else:
-        content = MASTER_FILE.read_text().splitlines(keepends=True)
-        if import_line not in content:
+        content_lines = MASTER_FILE.read_text().splitlines(keepends=True)
+        if import_line not in content_lines:
             with open(MASTER_FILE, "a") as f:
                 f.write(import_line)
 
@@ -183,6 +194,7 @@ def launch(
     subprocess.run(["git", "commit", "-m", commit_msg], check=True)
     subprocess.run(["git", "push", "-u", "origin", branch_name], check=True)
 
+    # Crear PR en GitHub con gh
     pr_title = f"{crq} - {operation} on {project}/{machine}"
     pr_body = (
         f"User **{user}** requested `{operation}` on:\n"
@@ -190,6 +202,11 @@ def launch(
         f"- Environment: {environment}\n"
         f"- Project: {project}\n"
         f"- Machine: {machine}\n"
+        f"- ADB Compartment: {tf_compartment or 'N/A'}\n"
+        f"- ADB Name: {tf_db_name or 'N/A'}\n"
+        f"- ADB Workload: {tf_db_workload or 'N/A'}\n"
+        f"- Ansible Extra Vars: {ansible_extra_vars or 'N/A'}\n"
+        f"- Ansible Limit Hosts: {ansible_limit or 'N/A'}\n"
         "\nPlease review and merge."
     )
     subprocess.run([
@@ -203,4 +220,3 @@ def launch(
 
     subprocess.run(["git", "checkout", "main"], check=True)
     return RedirectResponse(url="/", status_code=303)
-

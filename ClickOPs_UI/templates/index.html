@@ -35,12 +35,30 @@
     <!-- CONTENIDO PRINCIPAL -->
     <div class="p-6 space-y-6">
 
-      <!-- FORMULARIO -->
+      <!-- 1) TOGGLE ENTRE MODO PROVISIÓN / CAMBIOS -->
+      <div class="flex justify-center space-x-4">
+        <button
+          :class="mode === 'provision' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'"
+          @click="setMode('provision')"
+          class="px-4 py-2 rounded-md transition"
+        >
+          Provisión (Terraform)
+        </button>
+        <button
+          :class="mode === 'change' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'"
+          @click="setMode('change')"
+          class="px-4 py-2 rounded-md transition"
+        >
+          Cambios (Ansible)
+        </button>
+      </div>
+
+      <!-- FORMULARIO GENERAL -->
       <form @submit.prevent="openConfirmModal" class="space-y-6">
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-          <!-- Provider -->
+          <!-- Provider (común) -->
           <div>
             <label for="provider" class="block text-sm font-medium text-gray-700">Cloud Provider</label>
             <select id="provider" x-model="provider" @change="onProviderChange"
@@ -52,7 +70,7 @@
             </select>
           </div>
 
-          <!-- Environment -->
+          <!-- Environment (común) -->
           <div x-show="provider" x-cloak>
             <label for="environment" class="block text-sm font-medium text-gray-700">Environment</label>
             <select id="environment" x-model="environment" @change="onEnvironmentChange"
@@ -64,7 +82,7 @@
             </select>
           </div>
 
-          <!-- Project -->
+          <!-- Project (común) -->
           <div x-show="environment" x-cloak>
             <label for="project" class="block text-sm font-medium text-gray-700">Project</label>
             <select id="project" x-model="project" @change="onProjectChange"
@@ -76,8 +94,8 @@
             </select>
           </div>
 
-          <!-- Machine -->
-          <div x-show="project" x-cloak>
+          <!-- Machine (solo en modo 'change') -->
+          <div x-show="mode === 'change' && project" x-cloak>
             <label for="machine" class="block text-sm font-medium text-gray-700">Machine</label>
             <select id="machine" x-model="machine"
                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
@@ -88,35 +106,109 @@
             </select>
           </div>
 
-          <!-- Operation -->
-          <div class="sm:col-span-2">
-            <label for="operation" class="block text-sm font-medium text-gray-700">Operation</label>
-            <select id="operation" x-model="operation" @change="loadDocs"
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
-              <option value="" disabled selected>-- Select Operation --</option>
-              <option value="OPS101_start_vm">Start VM</option>
-              <option value="OPS102_stop_vm">Stop VM</option>
-              <option value="OPS103_provision_vm">Provision VM (Terraform)</option>
-            </select>
-          </div>
-
-          <!-- CRQ -->
+          <!-- CRQ (común) -->
           <div class="sm:col-span-2">
             <label for="crq" class="block text-sm font-medium text-gray-700">CRQ (Change Request ID)</label>
             <input type="text" id="crq" x-model="crq" placeholder="e.g. CRQ123456"
                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
                    required>
           </div>
+
         </div>
 
-        <!-- Documentation -->
-        <div x-show="operation" x-cloak>
+        <!-- 2) SELECT DE OPERACIÓN, SEGÚN MODO -->
+        <div class="space-y-1">
+          <label for="operation" class="block text-sm font-medium text-gray-700">Operation</label>
+          <select id="operation" x-model="operation" @change="loadDocs"
+                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+            <option value="" disabled selected>-- Select Operation --</option>
+            <!-- Si estamos en modo provisión, pintamos solo operaciones de Terraform -->
+            <template x-if="mode === 'provision'">
+              <template x-for="op in ops.provision" :key="op.value">
+                <option :value="op.value" x-text="op.label"></option>
+              </template>
+            </template>
+            <!-- Si estamos en modo cambios, pintamos solo operaciones de Ansible -->
+            <template x-if="mode === 'change'">
+              <template x-for="op in ops.change" :key="op.value">
+                <option :value="op.value" x-text="op.label"></option>
+              </template>
+            </template>
+          </select>
+        </div>
+
+        <!-- 3) VARIABLES/INPUTS EXTRAS POR TIPO DE OPERACIÓN -->
+        <!-- Campos extra solo para provisión (Terraform — Autonomous DB Free Tier) -->
+        <div x-show="mode === 'provision' && operation" x-cloak class="space-y-4 pt-4 border-t border-gray-200">
+          <h2 class="text-lg font-semibold text-gray-800">Variables Terraform (ADB Free Tier)</h2>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- Compartment OCID -->
+            <div>
+              <label for="tf_compartment" class="block text-sm font-medium text-gray-700">Compartment OCID</label>
+              <input type="text" id="tf_compartment" x-model="tf_vars.compartment"
+                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                     placeholder="ocid1.compartment.oc1..xxxx" required>
+            </div>
+
+            <!-- DB Name -->
+            <div>
+              <label for="tf_db_name" class="block text-sm font-medium text-gray-700">ADB Name</label>
+              <input type="text" id="tf_db_name" x-model="tf_vars.db_name"
+                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                     placeholder="e.g. myadb1" required>
+            </div>
+
+            <!-- Admin Password -->
+            <div>
+              <label for="tf_admin_password" class="block text-sm font-medium text-gray-700">Admin Password</label>
+              <input type="password" id="tf_admin_password" x-model="tf_vars.admin_password"
+                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                     placeholder="********" required>
+            </div>
+
+            <!-- DB Workload -->
+            <div>
+              <label for="tf_db_workload" class="block text-sm font-medium text-gray-700">Workload Type</label>
+              <select id="tf_db_workload" x-model="tf_vars.db_workload"
+                      class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                      required>
+                <option value="" disabled selected>-- Select Workload --</option>
+                <option value="OLTP">OLTP</option>
+                <option value="DW">DW</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Campos extra solo para cambios (Ansible) -->
+        <div x-show="mode === 'change' && operation" x-cloak class="space-y-4 pt-4 border-t border-gray-200">
+          <h2 class="text-lg font-semibold text-gray-800">Variables de Ansible</h2>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="ansible_extra_vars" class="block text-sm font-medium text-gray-700">Extra Vars (JSON)</label>
+              <textarea id="ansible_extra_vars" x-model="ansible_vars.extra"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        rows="3" placeholder='{"key": "value"}'></textarea>
+            </div>
+            <div>
+              <label for="ansible_limit" class="block text-sm font-medium text-gray-700">Limit Hosts</label>
+              <input type="text" id="ansible_limit" x-model="ansible_vars.limit"
+                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                     placeholder="e.g. webservers" />
+            </div>
+          </div>
+        </div>
+
+        <!-- 4) DOCUMENTACIÓN ASOCIADA A LA OPERACIÓN -->
+        <div x-show="operation" x-cloak class="pt-4">
           <label class="block text-sm font-medium text-gray-700">Documentation</label>
           <div id="docsContent" class="prose max-w-none bg-gray-50 p-4 rounded border"></div>
         </div>
 
-        <!-- Botón Launch -->
-        <div class="flex justify-center">
+        <!-- 5) BOTÓN LAUNCH -->
+        <div class="flex justify-center pt-4">
           <button type="submit"
                   class="inline-flex items-center px-6 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition">
             Launch Operation
@@ -132,12 +224,33 @@
     <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6 space-y-4 fade-in">
       <h2 class="text-xl font-semibold text-gray-800">Confirm Operation</h2>
       <div class="space-y-1 text-gray-700">
+        <p><strong>Modo:</strong> <span x-text="mode === 'provision' ? 'Provisión' : 'Cambios'"></span></p>
         <p><strong>CRQ:</strong> <span x-text="crq"></span></p>
         <p><strong>Provider:</strong> <span x-text="provider"></span></p>
         <p><strong>Environment:</strong> <span x-text="environment"></span></p>
         <p><strong>Project:</strong> <span x-text="project"></span></p>
-        <p><strong>Machine:</strong> <span x-text="machine"></span></p>
+        <!-- Solo mostramos Machine si estamos en modo 'change' -->
+        <template x-if="mode === 'change'">
+          <p><strong>Machine:</strong> <span x-text="machine"></span></p>
+        </template>
         <p><strong>Operation:</strong> <span x-text="operation"></span></p>
+
+        <!-- Resumen de variables extra, según modo -->
+        <template x-if="mode === 'provision'">
+          <div>
+            <p><strong>Compartment OCID:</strong> <span x-text="tf_vars.compartment"></span></p>
+            <p><strong>ADB Name:</strong> <span x-text="tf_vars.db_name"></span></p>
+            <p><strong>Admin Password:</strong> <span x-text="tf_vars.admin_password.replace(/./g, '*')"></span></p>
+            <p><strong>Workload:</strong> <span x-text="tf_vars.db_workload"></span></p>
+          </div>
+        </template>
+
+        <template x-if="mode === 'change'">
+          <div>
+            <p><strong>Extra Vars:</strong> <span x-text="ansible_vars.extra"></span></p>
+            <p><strong>Limit Hosts:</strong> <span x-text="ansible_vars.limit"></span></p>
+          </div>
+        </template>
       </div>
       <div class="flex justify-end space-x-4 pt-4">
         <button @click="showModal = false"
@@ -156,6 +269,8 @@
   <script>
     function clickOpsApp() {
       return {
+        // --- Estado principal ---
+        mode: 'provision',      // 'provision' o 'change'
         providers: [],
         environments: [],
         projects: [],
@@ -168,6 +283,32 @@
         crq: '',
         showModal: false,
 
+        // Variables extra para Terraform (ADB Free Tier)
+        tf_vars: {
+          compartment: '',
+          db_name: '',
+          admin_password: '',
+          db_workload: ''
+        },
+
+        // Variables extra para Ansible
+        ansible_vars: {
+          extra: '',
+          limit: ''
+        },
+
+        // Definición de operaciones según modo
+        ops: {
+          provision: [
+            { value: 'OPS103_provision_adb', label: 'Provision ADB Free Tier' }
+          ],
+          change: [
+            { value: 'OPS101_start_vm', label: 'Start VM' },
+            { value: 'OPS102_stop_vm',  label: 'Stop VM' }
+          ]
+        },
+
+        // --- Métodos de carga dinámica ---
         async fetchProviders() {
           const res = await fetch('/api/providers');
           this.providers = await res.json();
@@ -208,15 +349,55 @@
           const data = await res.json();
           document.getElementById("docsContent").innerHTML = marked.parse(data.content);
         },
+
+        // --- Cambio de modo (provision / change) ---
+        setMode(newMode) {
+          // Al cambiar de modo, reseteamos operación, variables y doc
+          this.mode = newMode;
+          this.operation = '';
+          document.getElementById("docsContent").innerHTML = '';
+          this.tf_vars = { compartment: '', db_name: '', admin_password: '', db_workload: '' };
+          this.ansible_vars = { extra: '', limit: '' };
+          // Si cambiamos a 'provision', limpiamos machine porque no aplica
+          if (newMode === 'provision') {
+            this.machine = '';
+          }
+        },
+
         openConfirmModal() {
-          if (!this.provider || !this.environment || !this.project || !this.machine || !this.operation || !this.crq) {
-            alert("Please fill out all fields before launching.");
+          // Validamos campos comunes
+          if (!this.provider || !this.environment || !this.project || !this.operation || !this.crq) {
+            alert("Please fill out all required fields.");
             return;
+          }
+          if (this.mode === 'provision') {
+            // Validamos campos de ADB
+            if (!this.tf_vars.compartment.trim() ||
+                !this.tf_vars.db_name.trim() ||
+                !this.tf_vars.admin_password.trim() ||
+                !this.tf_vars.db_workload.trim()) {
+              alert("Complete las variables de ADB antes de continuar.");
+              return;
+            }
+          } else if (this.mode === 'change') {
+            // En modo 'change', validamos también que se haya seleccionado machine
+            if (!this.machine.trim()) {
+              alert("Please select a machine to perform changes.");
+              return;
+            }
           }
           this.showModal = true;
         },
+
         async submitOperation() {
           this.showModal = false;
+
+          // En modo provisión, igualamos machine al project para el backend
+          if (this.mode === 'provision') {
+            this.machine = this.project;
+          }
+
+          // Creamos un FormData con todos los campos
           const formData = new FormData();
           formData.append("provider", this.provider);
           formData.append("environment", this.environment);
@@ -225,6 +406,20 @@
           formData.append("operation", this.operation);
           formData.append("crq", this.crq);
 
+          // Variables Terraform para ADB
+          if (this.mode === 'provision') {
+            formData.append("tf_compartment", this.tf_vars.compartment);
+            formData.append("tf_db_name", this.tf_vars.db_name);
+            formData.append("tf_admin_password", this.tf_vars.admin_password);
+            formData.append("tf_db_workload", this.tf_vars.db_workload);
+          }
+
+          // Variables Ansible
+          if (this.mode === 'change') {
+            formData.append("ansible_extra_vars", this.ansible_vars.extra);
+            formData.append("ansible_limit", this.ansible_vars.limit);
+          }
+
           const res = await fetch("/launch", {
             method: "POST",
             body: formData
@@ -232,6 +427,7 @@
 
           if (res.ok) {
             alert("Operation submitted!");
+            // Reseteamos todo el estado
             this.provider = '';
             this.environment = '';
             this.project = '';
@@ -241,12 +437,15 @@
             this.environments = [];
             this.projects = [];
             this.machines = [];
+            this.tf_vars = { compartment: '', db_name: '', admin_password: '', db_workload: '' };
+            this.ansible_vars = { extra: '', limit: '' };
             document.getElementById("docsContent").innerHTML = '';
             this.fetchProviders();
           } else {
             alert("There was a problem launching the operation.");
           }
         },
+
         init() {
           this.fetchProviders();
         }
