@@ -1,1 +1,2 @@
 # Entries added by ClickOps dynamically- import_playbook: catalog/OPS101_start_vm/start_vm.yml
+- import_playbook: catalog/OPS101_start_vm/start_vm.yml
