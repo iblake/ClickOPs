@@ -96,6 +96,7 @@
               <option value="" disabled selected>-- Select Operation --</option>
               <option value="OPS101_start_vm">Start VM</option>
               <option value="OPS102_stop_vm">Stop VM</option>
+              <option value="OPS103_provision_vm">Provision VM (Terraform)</option>
             </select>
           </div>
 
@@ -230,7 +231,7 @@
           });
 
           if (res.ok) {
-            alert("Operation submitted! Check your PR in GitHub.");
+            alert("Operation submitted!");
             this.provider = '';
             this.environment = '';
             this.project = '';
