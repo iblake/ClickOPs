@@ -75,7 +75,8 @@ def api_projects(provider: str, env: str):
 
 @app.get("/api/machines/{provider}/{env}/{project}")
 def api_machines(provider: str, env: str, project: str):
-    base = REPO_ROOT / f"oe_01/{provider}/{env}/{project}"
+    # En modo 'change' para ADB, listamos subdirectorios de adb/ dentro del proyecto
+    base = REPO_ROOT / f"oe_01/{provider}/{env}/{project}/adb"
     return JSONResponse(get_subdirs(base))
 
 # --- ENDPOINT PARA LEER docs.md DEL CATÁLOGO ---
@@ -95,7 +96,7 @@ async def launch(
     provider: str = Form(...),
     environment: str = Form(...),
     project: str = Form(...),
-    machine: str | None = Form(None),         # Puede venir vacío en provisioning ADB
+    machine: str | None = Form(None),
     operation: str = Form(...),
     crq: str = Form(...),
     # Variables Terraform para Autonomous DB Free Tier
@@ -111,7 +112,7 @@ async def launch(
     1) Si 'operation' contiene 'provision', copiar el módulo Terraform al inventario,
        crear terraform.tfvars.json con las variables de la Autonomous Database Free Tier,
        agregar run_terraform.txt y hacer git add/commit/push para disparar el workflow.
-    2) Si 'operation' es de tipo 'start' o 'stop', actualizar master.yml con el import_playbook
+    2) Si 'operation' es 'OPS105_ADB_START' o 'OPS106_ADB_STOP', actualizar master.yml con el import_playbook
        correspondiente y crear un PR en GitHub (GitOps para Ansible).
     """
     user = get_current_user(request)
@@ -151,7 +152,6 @@ async def launch(
         # e) Git add + commit + push para disparar automáticamente el workflow
         os.chdir(str(REPO_ROOT))
         subprocess.run(["git", "checkout", "main"], check=True)
-        # Añadir solo la carpeta específica de la ADB
         subprocess.run(["git", "add", str(inv_path.relative_to(REPO_ROOT))], check=True)
         commit_msg = f"ci: trigger ADB provisioning for {tf_db_name}"
         subprocess.run(["git", "commit", "-m", commit_msg], check=True)
@@ -160,74 +160,80 @@ async def launch(
         # f) Redirigir al usuario de vuelta
         return RedirectResponse(url="/", status_code=303)
 
-    # ––– CASO START / STOP VM (Ansible – GitOps) –––
-    if "start" in operation:
-        playbook_file = "start_vm.yml"
-    elif "stop" in operation:
-        playbook_file = "stop_vm.yml"
+    # ––– CASO START / STOP ADB (Ansible – GitOps) –––
+    if operation == "OPS105_ADB_START":
+        playbook_file = "adb_start.yml"
+        folder_name = "OPS105_ADB_START_STOP"
+    elif operation == "OPS106_ADB_STOP":
+        playbook_file = "adb_stop.yml"
+        folder_name = "OPS106_ADB_START_STOP"
     else:
         playbook_file = ""
+        folder_name = ""
 
-    # Guardar valores de ansible_extra_vars en un archivo extra_vars.yml, si se proporcionaron
-    if ansible_extra_vars:
+    # Guardar valores de ansible_extra_vars en extra_vars.yml, si se proporcionaron
+    if ansible_extra_vars and folder_name:
         extra_dict = {}
         try:
             extra_dict = yaml.safe_load(ansible_extra_vars)  # JSON o YAML válido
         except Exception:
             pass
 
-        inv_path_ansible = REPO_ROOT / f"oe_01/{provider}/{environment}/{project}/{machine}"
+        # La carpeta de inventario en este caso es: oe_01/{provider}/{environment}/{project}/adb/{machine}
+        inv_path_ansible = REPO_ROOT / f"oe_01/{provider}/{environment}/{project}/adb/{machine}"
         inv_path_ansible.mkdir(parents=True, exist_ok=True)
         with open(inv_path_ansible / "extra_vars.yml", "w") as f:
             yaml.dump(extra_dict, f)
 
     # Construir la línea de import_playbook que se añadirá a master.yml
-    import_line = f"- import_playbook: catalog/{operation}/{playbook_file}\n"
-
-    # Crear rama y hacer commit + push
-    branch_name = f"crq-{crq}"
-    os.chdir(str(REPO_ROOT))
-    subprocess.run(["git", "checkout", "main"], check=True)
-    subprocess.run(["git", "pull"], check=True)
-    subprocess.run(["git", "checkout", "-b", branch_name], check=True)
-
-    MASTER_FILE = REPO_ROOT / "master.yml"
-    if not MASTER_FILE.exists():
-        MASTER_FILE.write_text(import_line)
+    if folder_name:
+        import_line = f"- import_playbook: catalog/{folder_name}/{playbook_file}\n"
     else:
-        content_lines = MASTER_FILE.read_text().splitlines(keepends=True)
-        if import_line not in content_lines:
-            with open(MASTER_FILE, "a") as f:
-                f.write(import_line)
+        import_line = ""
 
-    subprocess.run(["git", "add", "master.yml"], check=True)
-    commit_msg = f"{crq}: Launch {operation} on {provider}/{environment}/{project}/{machine}"
-    subprocess.run(["git", "commit", "-m", commit_msg"], check=True)
-    subprocess.run(["git", "push", "-u", "origin", branch_name], check=True)
+    if import_line:
+        # Crear rama y hacer commit + push
+        branch_name = f"crq-{crq}"
+        os.chdir(str(REPO_ROOT))
+        subprocess.run(["git", "checkout", "main"], check=True)
+        subprocess.run(["git", "pull"], check=True)
+        subprocess.run(["git", "checkout", "-b", branch_name], check=True)
 
-    # Crear PR en GitHub con gh
-    pr_title = f"{crq} - {operation} on {project}/{machine}"
-    pr_body = (
-        f"User **{user}** requested `{operation}` on:\n"
-        f"- Provider: {provider}\n"
-        f"- Environment: {environment}\n"
-        f"- Project: {project}\n"
-        f"- Machine: {machine}\n"
-        f"- ADB Compartment: {tf_compartment or 'N/A'}\n"
-        f"- ADB Name: {tf_db_name or 'N/A'}\n"
-        f"- ADB Workload: {tf_db_workload or 'N/A'}\n"
-        f"- Ansible Extra Vars: {ansible_extra_vars or 'N/A'}\n"
-        f"- Ansible Limit Hosts: {ansible_limit or 'N/A'}\n"
-        "\nPlease review and merge."
-    )
-    subprocess.run([
-        "gh", "pr", "create",
-        "--title", pr_title,
-        "--body", pr_body,
-        "--head", branch_name,
-        "--base", "main",
-        "--fill"
-    ], check=False)
+        MASTER_FILE = REPO_ROOT / "master.yml"
+        if not MASTER_FILE.exists():
+            MASTER_FILE.write_text(import_line)
+        else:
+            content_lines = MASTER_FILE.read_text().splitlines(keepends=True)
+            if import_line not in content_lines:
+                with open(MASTER_FILE, "a") as f:
+                    f.write(import_line)
 
-    subprocess.run(["git", "checkout", "main"], check=True)
+        subprocess.run(["git", "add", "master.yml"], check=True)
+        commit_msg = f"{crq}: Launch {operation} on {provider}/{environment}/{project}/{machine}"
+        subprocess.run(["git", "commit", "-m", commit_msg], check=True)
+        # <-- Aquí estaba la comilla extra, la hemos quitado:
+        subprocess.run(["git", "push", "-u", "origin", branch_name], check=True)
+
+        # Crear Pull Request en GitHub con gh
+        pr_title = f"{crq} - {operation} on {project}/{machine}"
+        pr_body = (
+            f"User **{user}** requested `{operation}` on:\n"
+            f"- Provider: {provider}\n"
+            f"- Environment: {environment}\n"
+            f"- Project: {project}\n"
+            f"- ADB Identifier: {machine}\n"
+            f"- Extra Vars: `{ansible_extra_vars or 'N/A'}`\n"
+            "\nPlease review and merge."
+        )
+        subprocess.run([
+            "gh", "pr", "create",
+            "--title", pr_title,
+            "--body", pr_body,
+            "--head", branch_name,
+            "--base", "main",
+            "--fill"
+        ], check=False)
+
+        subprocess.run(["git", "checkout", "main"], check=True)
+
     return RedirectResponse(url="/", status_code=303)

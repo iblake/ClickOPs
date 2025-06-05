@@ -35,7 +35,6 @@ jobs:
         id: set_working_dir
         run: |
           if [[ "${{ github.event_name }}" == "push" ]]; then
-            # En push, buscamos run_terraform.txt modificado
             CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
             WORKING_DIR=$(echo "$CHANGED_FILES" \
               | grep -oE 'oe_01/oci/dev/[A-Za-z0-9_-]+/adb/[A-Za-z0-9_-]+' \
@@ -46,7 +45,6 @@ jobs:
               exit 0
             fi
           else
-            # En PR, buscamos carpeta de ADB según cambios en .tf o inputs.json
             CHANGED_FILES=$(git diff --name-only origin/main ${{ github.sha }})
             WORKING_DIR=$(echo "$CHANGED_FILES" \
               | grep -oE 'oe_01/oci/dev/[A-Za-z0-9_-]+/adb/[A-Za-z0-9_-]+' \

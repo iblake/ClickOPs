@@ -94,16 +94,17 @@
             </select>
           </div>
 
-          <!-- Machine (solo en modo 'change') -->
+          <!-- Machine (ADB) solo en modo 'change' -->
           <div x-show="mode === 'change' && project" x-cloak>
-            <label for="machine" class="block text-sm font-medium text-gray-700">Machine</label>
+            <label for="machine" class="block text-sm font-medium text-gray-700">ADB Identifier</label>
             <select id="machine" x-model="machine"
                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
-              <option value="" disabled selected>-- Select Machine --</option>
+              <option value="" disabled selected>-- Select ADB --</option>
               <template x-for="m in machines" :key="m">
                 <option :value="m" x-text="m"></option>
               </template>
             </select>
+            <p class="text-xs text-gray-500 mt-1">Selecciona la ADB creada anteriormente.</p>
           </div>
 
           <!-- CRQ (común) -->
@@ -190,13 +191,15 @@
               <label for="ansible_extra_vars" class="block text-sm font-medium text-gray-700">Extra Vars (JSON)</label>
               <textarea id="ansible_extra_vars" x-model="ansible_vars.extra"
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                        rows="3" placeholder='{"key": "value"}'></textarea>
+                        rows="3"
+                        placeholder='{"adb_compartment": "ocid1.compartment...", "adb_ocid": "ocid1.autonomousdatabase..."}'></textarea>
             </div>
             <div>
               <label for="ansible_limit" class="block text-sm font-medium text-gray-700">Limit Hosts</label>
               <input type="text" id="ansible_limit" x-model="ansible_vars.limit"
                      class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                     placeholder="e.g. webservers" />
+                     placeholder="e.g. localhost" />
+              <p class="text-xs text-gray-500 mt-1">Usa “localhost” para Ansible local.</p>
             </div>
           </div>
         </div>
@@ -229,9 +232,9 @@
         <p><strong>Provider:</strong> <span x-text="provider"></span></p>
         <p><strong>Environment:</strong> <span x-text="environment"></span></p>
         <p><strong>Project:</strong> <span x-text="project"></span></p>
-        <!-- Solo mostramos Machine si estamos en modo 'change' -->
+        <!-- Solo mostramos Machine (ADB) si estamos en modo 'change' -->
         <template x-if="mode === 'change'">
-          <p><strong>Machine:</strong> <span x-text="machine"></span></p>
+          <p><strong>ADB Identifier:</strong> <span x-text="machine"></span></p>
         </template>
         <p><strong>Operation:</strong> <span x-text="operation"></span></p>
 
@@ -248,7 +251,7 @@
         <template x-if="mode === 'change'">
           <div>
             <p><strong>Extra Vars:</strong> <span x-text="ansible_vars.extra"></span></p>
-            <p><strong>Limit Hosts:</strong> <span x-text="ansible_vars.limit"></span></p>
+            <p><strong>Limit Hosts:</strong> <span x-text="ansible_vars.limit || 'localhost'"></span></p>
           </div>
         </template>
       </div>
@@ -303,8 +306,8 @@
             { value: 'OPS103_provision_adb', label: 'Provision ADB Free Tier' }
           ],
           change: [
-            { value: 'OPS101_start_vm', label: 'Start VM' },
-            { value: 'OPS102_stop_vm',  label: 'Stop VM' }
+            { value: 'OPS105_ADB_START', label: 'Start ADB' },
+            { value: 'OPS106_ADB_STOP',  label: 'Stop ADB' }
           ]
         },
 
@@ -327,7 +330,7 @@
         async onEnvironmentChange() {
           this.project = '';
           this.machine = '';
-          this.projects = [];
+          this. projects = [];
           this.machines = [];
           if (!this.provider || !this.environment) return;
           const res = await fetch(`/api/projects/${this.provider}/${this.environment}`);
@@ -337,6 +340,7 @@
           this.machine = '';
           this.machines = [];
           if (!this.provider || !this.environment || !this.project) return;
+          // Cargamos las ADBs ya creadas como "máquinas" lógicas
           const res = await fetch(`/api/machines/${this.provider}/${this.environment}/${this.project}`);
           this.machines = await res.json();
         },
@@ -352,26 +356,22 @@
 
         // --- Cambio de modo (provision / change) ---
         setMode(newMode) {
-          // Al cambiar de modo, reseteamos operación, variables y doc
           this.mode = newMode;
           this.operation = '';
           document.getElementById("docsContent").innerHTML = '';
           this.tf_vars = { compartment: '', db_name: '', admin_password: '', db_workload: '' };
           this.ansible_vars = { extra: '', limit: '' };
-          // Si cambiamos a 'provision', limpiamos machine porque no aplica
           if (newMode === 'provision') {
             this.machine = '';
           }
         },
 
         openConfirmModal() {
-          // Validamos campos comunes
           if (!this.provider || !this.environment || !this.project || !this.operation || !this.crq) {
             alert("Please fill out all required fields.");
             return;
           }
           if (this.mode === 'provision') {
-            // Validamos campos de ADB
             if (!this.tf_vars.compartment.trim() ||
                 !this.tf_vars.db_name.trim() ||
                 !this.tf_vars.admin_password.trim() ||
@@ -380,9 +380,12 @@
               return;
             }
           } else if (this.mode === 'change') {
-            // En modo 'change', validamos también que se haya seleccionado machine
             if (!this.machine.trim()) {
-              alert("Please select a machine to perform changes.");
+              alert("Please select an existing ADB to start/stop.");
+              return;
+            }
+            if (!this.ansible_vars.extra.trim()) {
+              alert("Please provide Extra Vars (compartment + adb_ocid).");
               return;
             }
           }
@@ -392,12 +395,10 @@
         async submitOperation() {
           this.showModal = false;
 
-          // En modo provisión, igualamos machine al project para el backend
           if (this.mode === 'provision') {
             this.machine = this.project;
           }
 
-          // Creamos un FormData con todos los campos
           const formData = new FormData();
           formData.append("provider", this.provider);
           formData.append("environment", this.environment);
@@ -406,7 +407,6 @@
           formData.append("operation", this.operation);
           formData.append("crq", this.crq);
 
-          // Variables Terraform para ADB
           if (this.mode === 'provision') {
             formData.append("tf_compartment", this.tf_vars.compartment);
             formData.append("tf_db_name", this.tf_vars.db_name);
@@ -414,7 +414,6 @@
             formData.append("tf_db_workload", this.tf_vars.db_workload);
           }
 
-          // Variables Ansible
           if (this.mode === 'change') {
             formData.append("ansible_extra_vars", this.ansible_vars.extra);
             formData.append("ansible_limit", this.ansible_vars.limit);
@@ -427,7 +426,6 @@
 
           if (res.ok) {
             alert("Operation submitted!");
-            // Reseteamos todo el estado
             this.provider = '';
             this.environment = '';
             this.project = '';
