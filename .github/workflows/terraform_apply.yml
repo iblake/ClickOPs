@@ -1,22 +1,17 @@
-# .github/workflows/terraform-apply.yml
-
 name: Terraform Apply on ADB Provision (GitOps + ClickOps)
 
-# Se dispara en:
-# 1) pull_request sobre main para generar Terraform plan (GitOps)
-# 2) push a main cuando aparezca un run_terraform.txt en cualquier ADB inventory (ClickOps -> Apply)
 on:
   pull_request:
     branches:
       - main
     paths:
-      - 'oe_01/OCI/dev/**/adb/**/**/*.tf'
-      - 'oe_01/OCI/dev/**/adb/**/inputs.json'
+      - 'oe_01/oci/dev/**/adb/**/*.tf'
+      - 'oe_01/oci/dev/**/adb/**/inputs.json'
   push:
     branches:
       - main
     paths:
-      - 'oe_01/OCI/dev/**/adb/**/run_terraform.txt'
+      - 'oe_01/oci/dev/**/adb/**/run_terraform.txt'
 
 env:
   FINAL_REGION: ${{ secrets.OCI_REGION || 'eu-frankfurt-1' }}
@@ -40,10 +35,10 @@ jobs:
         id: set_working_dir
         run: |
           if [[ "${{ github.event_name }}" == "push" ]]; then
-            # En push, buscamos run_terraform.txt cambiado
+            # En push, buscamos run_terraform.txt modificado
             CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
             WORKING_DIR=$(echo "$CHANGED_FILES" \
-              | grep -oE 'oe_01/OCI/dev/[A-Za-z0-9_-]+/adb/[A-Za-z0-9_-]+' \
+              | grep -oE 'oe_01/oci/dev/[A-Za-z0-9_-]+/adb/[A-Za-z0-9_-]+' \
               | head -n 1)
             if [ -z "$WORKING_DIR" ]; then
               echo "No se encontró run_terraform.txt en path de ADB. Saliendo."
@@ -51,10 +46,10 @@ jobs:
               exit 0
             fi
           else
-            # En PR, buscamos carpeta de ADB según cambios *.tf o inputs.json
+            # En PR, buscamos carpeta de ADB según cambios en .tf o inputs.json
             CHANGED_FILES=$(git diff --name-only origin/main ${{ github.sha }})
             WORKING_DIR=$(echo "$CHANGED_FILES" \
-              | grep -oE 'oe_01/OCI/dev/[A-Za-z0-9_-]+/adb/[A-Za-z0-9_-]+' \
+              | grep -oE 'oe_01/oci/dev/[A-Za-z0-9_-]+/adb/[A-Za-z0-9_-]+' \
               | head -n 1)
             if [ -z "$WORKING_DIR" ]; then
               echo "No se detectaron cambios relevantes en ADB. Saliendo."
@@ -139,7 +134,7 @@ jobs:
       - name: Remove run_terraform.txt marker
         if: github.ref == 'refs/heads/main' && github.event_name == 'push' && steps.set_working_dir.outputs.project_found == 'true'
         run: |
-          MARKER_DIR=$(dirname "${{ env.TF_WORKING_DIR }}") 
+          MARKER_DIR=$(dirname "${{ env.TF_WORKING_DIR }}")
           rm -f "$MARKER_DIR/run_terraform.txt"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

@@ -109,18 +109,18 @@ async def launch(
 ):
     """
     1) Si 'operation' contiene 'provision', copiar el módulo Terraform al inventario,
-       crear terraform.tfvars.json con las variables de la Autonomous Database Free Tier
-       y dejar un marcador para Terraform.
+       crear terraform.tfvars.json con las variables de la Autonomous Database Free Tier,
+       agregar run_terraform.txt y hacer git add/commit/push para disparar el workflow.
     2) Si 'operation' es de tipo 'start' o 'stop', actualizar master.yml con el import_playbook
-       correspondiente y crear un PR en GitHub.
+       correspondiente y crear un PR en GitHub (GitOps para Ansible).
     """
     user = get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=303)
 
-    # ––– CASO PROVISION ADB FREE TIER (Terraform) –––
+    # ––– CASO PROVISION ADB FREE TIER (Terraform + ClickOps) –––
     if "provision" in operation:
-        # a) Inventory path: oe_01/{provider}/{environment}/{project}/adb/{tf_db_name}
+        # a) Crear carpeta de inventario para la ADB
         inv_path = REPO_ROOT / f"oe_01/{provider}/{environment}/{project}/adb/{tf_db_name}"
         inv_path.mkdir(parents=True, exist_ok=True)
 
@@ -129,7 +129,7 @@ async def launch(
         dest_tf_folder = inv_path / "terraform"
         shutil.copytree(src_tf_folder, dest_tf_folder, dirs_exist_ok=True)
 
-        # c) Crear terraform.tfvars.json con variables de ADB Free Tier
+        # c) Generar terraform.tfvars.json con variables de ADB Free Tier
         tfvars = {
             "compartment_id":         tf_compartment or "ocid1.compartment.oc1..exampleuniqueID",
             "db_name":                tf_db_name or f"{tf_db_name}",
@@ -144,14 +144,23 @@ async def launch(
         with open(dest_tf_folder / "terraform.tfvars.json", "w") as f:
             yaml.dump(tfvars, f)
 
-        # d) Crear marcador para que el pipeline de Terraform lo detecte
-        (inv_path / "run_terraform.txt").write_text("run-do-terraform-apply")
+        # d) Crear marcador run_terraform.txt
+        marker = inv_path / "run_terraform.txt"
+        marker.write_text("run-do-terraform-apply")
 
-        # e) Redirigir a la home
+        # e) Git add + commit + push para disparar automáticamente el workflow
+        os.chdir(str(REPO_ROOT))
+        subprocess.run(["git", "checkout", "main"], check=True)
+        # Añadir solo la carpeta específica de la ADB
+        subprocess.run(["git", "add", str(inv_path.relative_to(REPO_ROOT))], check=True)
+        commit_msg = f"ci: trigger ADB provisioning for {tf_db_name}"
+        subprocess.run(["git", "commit", "-m", commit_msg], check=True)
+        subprocess.run(["git", "push", "origin", "main"], check=True)
+
+        # f) Redirigir al usuario de vuelta
         return RedirectResponse(url="/", status_code=303)
 
-    # ––– CASO START / STOP VM (Ansible) –––
-    # En este caso sí esperamos que 'machine' venga con un valor
+    # ––– CASO START / STOP VM (Ansible – GitOps) –––
     if "start" in operation:
         playbook_file = "start_vm.yml"
     elif "stop" in operation:
@@ -161,14 +170,16 @@ async def launch(
 
     # Guardar valores de ansible_extra_vars en un archivo extra_vars.yml, si se proporcionaron
     if ansible_extra_vars:
+        extra_dict = {}
         try:
             extra_dict = yaml.safe_load(ansible_extra_vars)  # JSON o YAML válido
-            inv_path_ansible = REPO_ROOT / f"oe_01/{provider}/{environment}/{project}/{machine}"
-            inv_path_ansible.mkdir(parents=True, exist_ok=True)
-            with open(inv_path_ansible / "extra_vars.yml", "w") as f:
-                yaml.dump(extra_dict, f)
         except Exception:
-            pass  # Ignorar si no es un JSON/YAML válido
+            pass
+
+        inv_path_ansible = REPO_ROOT / f"oe_01/{provider}/{environment}/{project}/{machine}"
+        inv_path_ansible.mkdir(parents=True, exist_ok=True)
+        with open(inv_path_ansible / "extra_vars.yml", "w") as f:
+            yaml.dump(extra_dict, f)
 
     # Construir la línea de import_playbook que se añadirá a master.yml
     import_line = f"- import_playbook: catalog/{operation}/{playbook_file}\n"
@@ -191,7 +202,7 @@ async def launch(
 
     subprocess.run(["git", "add", "master.yml"], check=True)
     commit_msg = f"{crq}: Launch {operation} on {provider}/{environment}/{project}/{machine}"
-    subprocess.run(["git", "commit", "-m", commit_msg], check=True)
+    subprocess.run(["git", "commit", "-m", commit_msg"], check=True)
     subprocess.run(["git", "push", "-u", "origin", branch_name], check=True)
 
     # Crear PR en GitHub con gh
