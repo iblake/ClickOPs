@@ -8,13 +8,8 @@ terraform {
   }
 }
 
-variable "oci_profile" {
-  description = "Profile name to use from ~/.oci/config"
-  type        = string
-  default     = "DEFAULT"
-}
-
 provider "oci" {
   config_file_profile = var.oci_profile
 }
+
 

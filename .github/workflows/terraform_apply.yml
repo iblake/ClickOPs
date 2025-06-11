@@ -4,11 +4,11 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'oe_01/oci/dev/**/adb/adb_resources.json'
+      - 'oe_01/oci/**/adb/adb_resources.json'
   push:
     branches: [main]
     paths:
-      - 'oe_01/oci/dev/**/adb/adb_resources.json'
+      - 'oe_01/oci/**/adb/adb_resources.json'
 
 jobs:
   terraform:
@@ -21,18 +21,16 @@ jobs:
       - name: Detect Project Info
         id: detect
         run: |
-          # Buscar el primer archivo de JSON modificado
-          CHANGED_FILE=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep 'oe_01/oci/dev/.*/adb/adb_resources.json' | head -1)
+          CHANGED_FILE=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep 'oe_01/oci/.*/adb/adb_resources.json' | head -1)
           if [ -z "$CHANGED_FILE" ]; then
-            CHANGED_FILE=$(git diff --name-only origin/main ${{ github.sha }} | grep 'oe_01/oci/dev/.*/adb/adb_resources.json' | head -1)
+            CHANGED_FILE=$(git diff --name-only origin/main ${{ github.sha }} | grep 'oe_01/oci/.*/adb/adb_resources.json' | head -1)
           fi
           echo "CHANGED_FILE=$CHANGED_FILE" >> $GITHUB_ENV
-          # Extraer el proyecto del path (asume estructura fija)
           PROJECT=$(echo "$CHANGED_FILE" | awk -F'/' '{print $5}')
           ENVIRONMENT=$(echo "$CHANGED_FILE" | awk -F'/' '{print $4}')
           echo "PROJECT=$PROJECT" >> $GITHUB_ENV
           echo "ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_ENV
-          echo "ADB_JSON=oe_01/oci/$ENVIRONMENT/$PROJECT/adb/adb_resources.json" >> $GITHUB_ENV
+          echo "ADB_JSON=$CHANGED_FILE" >> $GITHUB_ENV
           echo "TF_STATE_KEY=oe_01/oci/$ENVIRONMENT/$PROJECT/adb/terraform.tfstate" >> $GITHUB_ENV
           echo "TF_WORKING_DIR=catalog/OPS103_provision_adb" >> $GITHUB_ENV
 
@@ -63,6 +61,8 @@ jobs:
         run: |
           terraform plan -no-color \
             -var="inputs_json_path=${{ github.workspace }}/${{ env.ADB_JSON }}" \
+            -var="compartment_ocid=${{ secrets.OCI_ADB_COMPARTMENT_OCID }}" \
+            -var="region=${{ secrets.OCI_REGION }}" \
             -out=tfplan > plan.txt || exit 1
         continue-on-error: true
 
@@ -97,4 +97,6 @@ jobs:
         run: |
           terraform apply -no-color \
             -auto-approve \
-            -var="inputs_json_path=${{ github.workspace }}/${{ env.ADB_JSON }}"
+            -var="inputs_json_path=${{ github.workspace }}/${{ env.ADB_JSON }}" \
+            -var="compartment_ocid=${{ secrets.OCI_ADB_COMPARTMENT_OCID }}" \
+            -var="region=${{ secrets.OCI_REGION }}"
