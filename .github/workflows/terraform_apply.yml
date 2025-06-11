@@ -13,7 +13,6 @@ on:
 jobs:
   terraform:
     runs-on: self-hosted
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -25,9 +24,17 @@ jobs:
           if [ -z "$CHANGED_FILE" ]; then
             CHANGED_FILE=$(git diff --name-only origin/main ${{ github.sha }} | grep 'oe_01/oci/.*/adb/adb_resources.json' | head -1)
           fi
-          echo "CHANGED_FILE=$CHANGED_FILE" >> $GITHUB_ENV
-          PROJECT=$(echo "$CHANGED_FILE" | awk -F'/' '{print $5}')
+          if [ -z "$CHANGED_FILE" ]; then
+            echo "::error ::No adb_resources.json file change detected!"
+            exit 1
+          fi
           ENVIRONMENT=$(echo "$CHANGED_FILE" | awk -F'/' '{print $4}')
+          PROJECT=$(echo "$CHANGED_FILE" | awk -F'/' '{print $5}')
+          if [ -z "$ENVIRONMENT" ] || [ -z "$PROJECT" ]; then
+            echo "::error ::Could not parse ENVIRONMENT or PROJECT from $CHANGED_FILE"
+            exit 1
+          fi
+          echo "CHANGED_FILE=$CHANGED_FILE" >> $GITHUB_ENV
           echo "PROJECT=$PROJECT" >> $GITHUB_ENV
           echo "ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_ENV
           echo "ADB_JSON=$CHANGED_FILE" >> $GITHUB_ENV
@@ -42,6 +49,7 @@ jobs:
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
+          echo "TF_STATE_KEY=${{ env.TF_STATE_KEY }}"
           terraform init -upgrade \
             -backend-config="bucket=${{ secrets.OCI_TF_STATE_BUCKET }}" \
             -backend-config="namespace=${{ secrets.OCI_TF_STATE_NAMESPACE }}" \
@@ -100,3 +108,4 @@ jobs:
             -var="inputs_json_path=${{ github.workspace }}/${{ env.ADB_JSON }}" \
             -var="compartment_ocid=${{ secrets.OCI_ADB_COMPARTMENT_OCID }}" \
             -var="region=${{ secrets.OCI_REGION }}"
+
