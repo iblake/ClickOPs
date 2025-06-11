@@ -8,6 +8,7 @@ terraform {
   }
 }
 
+# Permite definir el perfil (profile) a usar en ~/.oci/config (útil para desarrollo local y runners)
 variable "oci_profile" {
   description = "Profile name to use from ~/.oci/config"
   type        = string
@@ -17,4 +18,3 @@ variable "oci_profile" {
 provider "oci" {
   config_file_profile = var.oci_profile
 }
-
