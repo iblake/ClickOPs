@@ -74,7 +74,6 @@ def api_projects(provider: str, env: str):
     base = REPO_ROOT / f"oe_01/{provider}/{env}"
     return JSONResponse(get_subdirs(base))
 
-# NUEVO: Endpoint para listar ADBs centralizadas desde JSON
 @app.get("/api/adbs/{provider}/{environment}/{project}")
 def api_adbs(provider: str, environment: str, project: str):
     adb_json_path = REPO_ROOT / f"oe_01/{provider}/{environment}/{project}/adb/adb_resources.json"
@@ -108,12 +107,23 @@ async def launch(
     if not user:
         return RedirectResponse(url="/login", status_code=303)
 
-    # Provision ADB usando JSON centralizado
+    # --- PROVISION ADB ---
     if operation == "OPS103_provision_adb":
         if not (tf_compartment and tf_db_name and tf_admin_password and tf_db_workload):
             return JSONResponse({"error": "Faltan variables Terraform para ADB"}, status_code=400)
+
         adb_json_path = REPO_ROOT / f"oe_01/{provider}/{environment}/{project}/adb/adb_resources.json"
         adb_json_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # --- PREPARAR OPERACIÓN GIT ---
+        os.chdir(str(REPO_ROOT))
+        subprocess.run(["git", "stash"], check=False)
+        subprocess.run(["git", "checkout", "main"], check=True)
+        subprocess.run(["git", "pull"], check=True)
+        branch_name = f"crq-{crq}-provision-{tf_db_name}"
+        subprocess.run(["git", "checkout", "-b", branch_name], check=True)
+
+        # --- ACTUALIZA EL JSON SOLO EN LA RAMA NUEVA ---
         data = load_adbs_json(adb_json_path)
         new_adb = {
             "name": tf_db_name,
@@ -132,13 +142,14 @@ async def launch(
         data["adbs"].append(new_adb)
         save_adbs_json(adb_json_path, data)
 
-        branch_name = f"crq-{crq}-provision-{tf_db_name}"
-        os.chdir(str(REPO_ROOT))
-        subprocess.run(["git", "checkout", "main"], check=True)
-        subprocess.run(["git", "pull"], check=True)
-        subprocess.run(["git", "checkout", "-b", branch_name], check=True)
         rel_path = adb_json_path.relative_to(REPO_ROOT)
         subprocess.run(["git", "add", str(rel_path)], check=True)
+
+        # --- PREVIENE COMMIT VACÍO ---
+        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+        if not status.stdout.strip():
+            return JSONResponse({"info": "ADB JSON already up-to-date. No commit created."}, status_code=200)
+
         commit_msg = f"{crq}: Update ADB JSON with {tf_db_name} on {provider}/{environment}/{project}"
         subprocess.run(["git", "commit", "-m", commit_msg], check=True)
         subprocess.run(["git", "push", "-u", "origin", branch_name], check=True)
@@ -162,7 +173,7 @@ async def launch(
         ], check=False)
         return RedirectResponse(url="/", status_code=303)
 
-    # START/STOP ADB usando JSON centralizado
+    # --- START/STOP ADB usando JSON centralizado ---
     if operation in ("OPS105_ADB_START", "OPS106_ADB_STOP"):
         if not machine:
             return JSONResponse({"error": "ADB name is required to start/stop."}, status_code=400)
@@ -181,10 +192,11 @@ async def launch(
 
         import_line = f"- import_playbook: catalog/OPS105_ADB_START_STOP/{'adb_start.yml' if operation == 'OPS105_ADB_START' else 'adb_stop.yml'}\n"
 
-        branch_name = f"crq-{crq}-{operation}-{machine}"
         os.chdir(str(REPO_ROOT))
+        subprocess.run(["git", "stash"], check=False)
         subprocess.run(["git", "checkout", "main"], check=True)
         subprocess.run(["git", "pull"], check=True)
+        branch_name = f"crq-{crq}-{operation}-{machine}"
         subprocess.run(["git", "checkout", "-b", branch_name], check=True)
 
         MASTER_FILE = REPO_ROOT / "master.yml"
@@ -198,6 +210,11 @@ async def launch(
 
         subprocess.run(["git", "add", "master.yml"], check=True)
         subprocess.run(["git", "add", str(extra_vars_file)], check=True)
+
+        # --- PREVIENE COMMIT VACÍO ---
+        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+        if not status.stdout.strip():
+            return JSONResponse({"info": "No changes to commit for this ADB operation."}, status_code=200)
 
         commit_msg = f"{crq}: {operation} on {provider}/{environment}/{project}/{machine}"
         subprocess.run(["git", "commit", "-m", commit_msg], check=True)

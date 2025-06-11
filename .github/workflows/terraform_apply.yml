@@ -7,11 +7,13 @@ on:
     paths:
       - 'oe_01/oci/dev/**/adb/**/*.tf'
       - 'oe_01/oci/dev/**/adb/**/inputs.json'
+      - 'oe_01/oci/dev/**/adb/adb_resources.json'
   push:
     branches:
       - main
     paths:
-      - 'oe_01/oci/dev/**/adb/**/run_terraform.txt'
+      - 'oe_01/oci/dev/**/adb/adb_resources.json'
+
 
 env:
   FINAL_REGION: ${{ secrets.OCI_REGION || 'eu-frankfurt-1' }}
