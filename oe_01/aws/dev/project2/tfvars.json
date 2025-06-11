@@ -1,0 +1,114 @@
+{
+  "region": "eu-west-1",
+  "tags": {
+    "Project": "Proj1",
+    "Environment": "Production"
+  },
+  "vpcs": {
+    "vpc-proj1-prod": {
+      "cidr_block": "10.0.0.0/16",
+      "enable_dns_hostnames": true,
+      "enable_dns_support": true,
+      "subnets": {
+        "subnet-web": {
+          "cidr_block": "10.0.1.0/24",
+          "availability_zone": "eu-west-1a"
+        },
+        "subnet-app": {
+          "cidr_block": "10.0.2.0/24",
+          "availability_zone": "eu-west-1a"
+        },
+        "subnet-db": {
+          "cidr_block": "10.0.3.0/24",
+          "availability_zone": "eu-west-1a"
+        }
+      },
+      "security_groups": {
+        "sg-proj1-web": {
+          "description": "Security group for web servers",
+          "ingress_rules": {
+            "http_80_inbound": {
+              "description": "Allow HTTP from anywhere",
+              "from_port": 80,
+              "to_port": 80,
+              "protocol": "tcp",
+              "cidr_blocks": ["0.0.0.0/0"]
+            },
+            "https_443_inbound": {
+              "description": "Allow HTTPS from anywhere",
+              "from_port": 443,
+              "to_port": 443,
+              "protocol": "tcp",
+              "cidr_blocks": ["0.0.0.0/0"]
+            },
+            "ssh_22_management": {
+              "description": "Allow SSH from specific management CIDR",
+              "from_port": 22,
+              "to_port": 22,
+              "protocol": "tcp",
+              "cidr_blocks": ["10.0.3.0/24"]
+            }
+          },
+          "egress_rules": {
+            "all_outbound": {
+              "description": "Allow all outbound traffic",
+              "from_port": 0,
+              "to_port": 0,
+              "protocol": "-1",
+              "cidr_blocks": ["0.0.0.0/0"]
+            }
+          }
+        },
+        "sg-proj1-app": {
+          "description": "Security group for application servers",
+          "ingress_rules": {
+            "http_from_web": {
+              "description": "Allow HTTP from web tier",
+              "from_port": 80,
+              "to_port": 80,
+              "protocol": "tcp",
+              "source_security_group_name": "sg-proj1-web"
+            },
+            "https_from_web": {
+              "description": "Allow HTTPS from web tier",
+              "from_port": 443,
+              "to_port": 443,
+              "protocol": "tcp",
+              "source_security_group_name": "sg-proj1-web"
+            }
+          },
+          "egress_rules": {
+            "all_outbound": {
+              "description": "Allow all outbound traffic",
+              "from_port": 0,
+              "to_port": 0,
+              "protocol": "-1",
+              "cidr_blocks": ["0.0.0.0/0"]
+            }
+          }
+        },
+        "sg-proj1-db": {
+          "description": "Security group for database servers",
+          "ingress_rules": {
+            "oracle_from_app": {
+              "description": "Allow Oracle (1521) from app tier",
+              "from_port": 1521,
+              "to_port": 1521,
+              "protocol": "tcp",
+              "source_security_group_name": "sg-proj1-app"
+            }
+          },
+          "egress_rules": {
+            "all_outbound": {
+              "description": "Allow all outbound traffic",
+              "from_port": 0,
+              "to_port": 0,
+              "protocol": "-1",
+              "cidr_blocks": ["0.0.0.0/0"]
+            }
+          }
+        }
+      }
+    }
+  }
+}

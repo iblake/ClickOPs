@@ -111,7 +111,7 @@ async def launch(
     """
     1) Si 'operation' contiene 'provision', copiar el módulo Terraform al inventario,
        crear terraform.tfvars.json con las variables de la Autonomous Database Free Tier,
-       agregar run_terraform.txt y hacer git add/commit/push para disparar el workflow.
+       agregar run_terraform.txt y crear una rama + Pull Request para disparar el workflow de Terraform.
     2) Si 'operation' es 'OPS105_ADB_START' o 'OPS106_ADB_STOP', actualizar master.yml con el import_playbook
        correspondiente y crear un PR en GitHub (GitOps para Ansible).
     """
@@ -119,8 +119,12 @@ async def launch(
     if not user:
         return RedirectResponse(url="/login", status_code=303)
 
-    # ––– CASO PROVISION ADB FREE TIER (Terraform + ClickOps) –––
-    if "provision" in operation:
+    # ––– CASO PROVISION ADB FREE TIER (Terraform + ClickOps → GitOps con PR) –––
+    if operation == "OPS103_provision_adb":
+        # Validar que se recibieron las variables obligatorias
+        if not (tf_compartment and tf_db_name and tf_admin_password and tf_db_workload):
+            return JSONResponse({"error": "Faltan variables Terraform para ADB"}, status_code=400)
+
         # a) Crear carpeta de inventario para la ADB
         inv_path = REPO_ROOT / f"oe_01/{provider}/{environment}/{project}/adb/{tf_db_name}"
         inv_path.mkdir(parents=True, exist_ok=True)
@@ -132,14 +136,14 @@ async def launch(
 
         # c) Generar terraform.tfvars.json con variables de ADB Free Tier
         tfvars = {
-            "compartment_id":         tf_compartment or "ocid1.compartment.oc1..exampleuniqueID",
-            "db_name":                tf_db_name or f"{tf_db_name}",
+            "compartment_id":         tf_compartment,
+            "db_name":                tf_db_name,
             "cpu_core_count":         1,
             "data_storage_size_in_tbs": 1,
-            "admin_password":         tf_admin_password or "DefaultPassw0rd!",
-            "db_workload":            tf_db_workload or "OLTP",
+            "admin_password":         tf_admin_password,
+            "db_workload":            tf_db_workload,
             "is_free_tier":           True,
-            "display_name":           tf_db_name or f"{project}-freeADB",
+            "display_name":           tf_db_name,
             "license_model":          "LICENSE_INCLUDED"
         }
         with open(dest_tf_folder / "terraform.tfvars.json", "w") as f:
@@ -149,18 +153,49 @@ async def launch(
         marker = inv_path / "run_terraform.txt"
         marker.write_text("run-do-terraform-apply")
 
-        # e) Git add + commit + push para disparar automáticamente el workflow
+        # e) GitOps con Pull Request:
+        #    - Crear rama desde main
+        #    - Añadir el directorio completo de la ADB
+        #    - Hacer commit y push de esa rama
+        #    - Abrir PR automáticamente con gh
+        branch_name = f"crq-{crq}-provision-{tf_db_name}"
         os.chdir(str(REPO_ROOT))
         subprocess.run(["git", "checkout", "main"], check=True)
-        subprocess.run(["git", "add", str(inv_path.relative_to(REPO_ROOT))], check=True)
-        commit_msg = f"ci: trigger ADB provisioning for {tf_db_name}"
-        subprocess.run(["git", "commit", "-m", commit_msg], check=True)
-        subprocess.run(["git", "push", "origin", "main"], check=True)
+        subprocess.run(["git", "pull"], check=True)
+        subprocess.run(["git", "checkout", "-b", branch_name], check=True)
 
-        # f) Redirigir al usuario de vuelta
+        # Añadir todos los archivos nuevos de la carpeta ADB:
+        rel_path = inv_path.relative_to(REPO_ROOT)
+        subprocess.run(["git", "add", str(rel_path)], check=True)
+
+        commit_msg = f"{crq}: Provision ADB {tf_db_name} on {provider}/{environment}/{project}"
+        subprocess.run(["git", "commit", "-m", commit_msg], check=True)
+        subprocess.run(["git", "push", "-u", "origin", branch_name], check=True)
+
+        # Crear Pull Request usando gh CLI
+        pr_title = f"{crq} - Provision ADB {tf_db_name}"
+        pr_body = (
+            f"User **{user}** requested provisioning of ADB **{tf_db_name}** in:\n"
+            f"- Provider: {provider}\n"
+            f"- Environment: {environment}\n"
+            f"- Project: {project}\n"
+            f"- Compartment OCID: {tf_compartment}\n\n"
+            "Este PR añade el módulo Terraform y el marcador run_terraform.txt. "
+            "Por favor revisar y hacer merge para ejecutar Terraform Apply automáticamente."
+        )
+        subprocess.run([
+            "gh", "pr", "create",
+            "--title", pr_title,
+            "--body", pr_body,
+            "--head", branch_name,
+            "--base", "main",
+            "--fill"
+        ], check=False)
+
+        # Redirigir al usuario de vuelta (no esperamos a que el PR se fusione)
         return RedirectResponse(url="/", status_code=303)
 
-    # ––– CASO START / STOP ADB (Ansible – GitOps) –––
+    # ––– CASO START / STOP ADB (Ansible – GitOps con PR) –––
     if operation == "OPS105_ADB_START":
         playbook_file = "adb_start.yml"
         folder_name = "OPS105_ADB_START_STOP"
@@ -171,29 +206,27 @@ async def launch(
         playbook_file = ""
         folder_name = ""
 
-    # Guardar valores de ansible_extra_vars en extra_vars.yml, si se proporcionaron
-    if ansible_extra_vars and folder_name:
+    if operation in ("OPS105_ADB_START", "OPS106_ADB_STOP"):
+        # Guardar valores de ansible_extra_vars en extra_vars.yml
+        if not ansible_extra_vars:
+            return JSONResponse({"error": "Faltan variables Ansible"}, status_code=400)
+
         extra_dict = {}
         try:
             extra_dict = yaml.safe_load(ansible_extra_vars)  # JSON o YAML válido
         except Exception:
             pass
 
-        # La carpeta de inventario en este caso es: oe_01/{provider}/{environment}/{project}/adb/{machine}
         inv_path_ansible = REPO_ROOT / f"oe_01/{provider}/{environment}/{project}/adb/{machine}"
         inv_path_ansible.mkdir(parents=True, exist_ok=True)
         with open(inv_path_ansible / "extra_vars.yml", "w") as f:
             yaml.dump(extra_dict, f)
 
-    # Construir la línea de import_playbook que se añadirá a master.yml
-    if folder_name:
+        # Crear línea de import_playbook para master.yml
         import_line = f"- import_playbook: catalog/{folder_name}/{playbook_file}\n"
-    else:
-        import_line = ""
 
-    if import_line:
-        # Crear rama y hacer commit + push
-        branch_name = f"crq-{crq}"
+        # Crear rama, commit + push y abrir PR
+        branch_name = f"crq-{crq}-{operation}-{machine}"
         os.chdir(str(REPO_ROOT))
         subprocess.run(["git", "checkout", "main"], check=True)
         subprocess.run(["git", "pull"], check=True)
@@ -209,12 +242,10 @@ async def launch(
                     f.write(import_line)
 
         subprocess.run(["git", "add", "master.yml"], check=True)
-        commit_msg = f"{crq}: Launch {operation} on {provider}/{environment}/{project}/{machine}"
+        commit_msg = f"{crq}: {operation} on {provider}/{environment}/{project}/{machine}"
         subprocess.run(["git", "commit", "-m", commit_msg], check=True)
-        # <-- Aquí estaba la comilla extra, la hemos quitado:
         subprocess.run(["git", "push", "-u", "origin", branch_name], check=True)
 
-        # Crear Pull Request en GitHub con gh
         pr_title = f"{crq} - {operation} on {project}/{machine}"
         pr_body = (
             f"User **{user}** requested `{operation}` on:\n"
@@ -222,8 +253,8 @@ async def launch(
             f"- Environment: {environment}\n"
             f"- Project: {project}\n"
             f"- ADB Identifier: {machine}\n"
-            f"- Extra Vars: `{ansible_extra_vars or 'N/A'}`\n"
-            "\nPlease review and merge."
+            f"- Extra Vars: `{ansible_extra_vars}`\n\n"
+            "Por favor revisar y hacer merge para ejecutar Ansible Playbook."
         )
         subprocess.run([
             "gh", "pr", "create",
@@ -234,6 +265,7 @@ async def launch(
             "--fill"
         ], check=False)
 
-        subprocess.run(["git", "checkout", "main"], check=True)
+        return RedirectResponse(url="/", status_code=303)
 
+    # Si la operación no coincide con nada, simplemente redirigimos
     return RedirectResponse(url="/", status_code=303)
