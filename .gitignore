@@ -172,3 +172,13 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# terraform
+.terraform/
+# terraform plan files
+*.tfplan
+# terraform state files
+*.tfstate
+# terraform override files
+override.tf
+override.tf.json
