@@ -3,24 +3,11 @@ locals {
 }
 
 module "adb" {
-  source  = "github.com/oracle-devrel/terraform-oci-arch-adb?ref=main"
-
-  # Cada ADB definido en el JSON se despliega como un recurso
-  for_each = { for adb in local.adb_resources.adbs : adb.name => adb }
-
-  compartment_ocid           = each.value.compartment_ocid
-  region                     = var.region
-  adb_password               = each.value.adb_password
-  db_name                    = each.value.db_name
-  display_name               = each.value.display_name
-  db_workload                = each.value.db_workload
-  db_version                 = each.value.db_version
-  cpu_core_count             = each.value.cpu_core_count
-  data_storage_size_in_tbs   = each.value.data_storage_size_in_tbs
-  is_free_tier               = each.value.is_free_tier
-  license_model              = each.value.license_model
-
-  # Puedes añadir aquí más variables opcionales según tu módulo y necesidades.
+  source           = "github.com/oracle-devrel/terraform-oci-arch-adb?ref=v2.1.1"
+  compartment_ocid = var.compartment_ocid
+  region           = var.region
+  adb_databases    = local.adb_resources.adbs
 }
+
 
 

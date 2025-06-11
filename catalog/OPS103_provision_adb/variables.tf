@@ -1,9 +1,20 @@
-variable "region" {
-  description = "OCI region to use (e.g., eu-frankfurt-1)"
-  type        = string
+terraform {
+  backend "oci" {}
+  required_providers {
+    oci = {
+      source  = "oracle/oci"
+      version = ">= 5.0.0"
+    }
+  }
 }
 
-variable "inputs_json_path" {
-  description = "Path to the input JSON describing the ADBs"
+variable "oci_profile" {
+  description = "Profile name to use from ~/.oci/config"
   type        = string
+  default     = "DEFAULT"
 }
+
+provider "oci" {
+  config_file_profile = var.oci_profile
+}
+

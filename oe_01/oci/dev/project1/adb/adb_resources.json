@@ -1,16 +1,15 @@
 {
   "adbs": [
     {
-      "name": "dgcadb",                    
-      "compartment_ocid": "ocid1.compartment.oc1..xxxx", 
-      "db_name": "dgcadb",                   
-      "display_name": "dgcadb",              
-      "db_workload": "OLTP",                 
-      "db_version": "19.0.0",                
-      "cpu_core_count": 1,                 
-      "data_storage_size_in_tbs": 1,         
-      "license_model": "LICENSE_INCLUDED",   
-      "adb_password": "MySuper#Password123"   
+      "display_name": "dgcADB",
+      "db_name": "dgcADB",
+      "admin_password": "SuperSecret123!",
+      "cpu_core_count": 1,
+      "data_storage_size_in_tbs": 1,
+      "db_workload": "OLTP",
+      "is_free_tier": true,
+      "license_model": "LICENSE_INCLUDED",
+      "db_version": "19c"
     }
   ]
 }
