@@ -27,6 +27,19 @@
       "tags": {
         "Project": "ClickOps"
       }
+    },
+    {
+      "name": "dgcADB2",
+      "compartment_id": "ocid1.compartment.oc1..aaaaaaaaoqn77wyhkn3crracqfaqg3pyoo5243snf4dtvhroohl5sp6hd5fq",
+      "cpu_core_count": 1,
+      "data_storage_size_in_tbs": 1,
+      "admin_password": "sT45PLACiARFRaNAroa_#",
+      "db_name": "dgcADB2",
+      "db_workload": "OLTP",
+      "is_free_tier": true,
+      "display_name": "dgcADB2",
+      "license_model": "LICENSE_INCLUDED",
+      "tags": {}
     }
   ]
 }
