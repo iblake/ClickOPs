@@ -1,26 +1,17 @@
 {
   "adbs": [
     {
-      "display_name": "dev-adb1",
-      "db_name": "devadb1",
-      "admin_password": "MySuperSecure1!",
+      "db_name": "adb1",
+      "display_name": "adb1",
+      "compartment_id": "ocid1.compartment.oc1....",
+      "admin_password": "SuperSecret123!",
       "db_workload": "OLTP",
       "is_free_tier": true,
       "cpu_core_count": 1,
       "data_storage_size_in_tbs": 1,
       "license_model": "LICENSE_INCLUDED",
-      "db_version": "19.0.0"
-    },
-    {
-      "display_name": "dev-adb2",
-      "db_name": "devadb2",
-      "admin_password": "AnotherPass2!",
-      "db_workload": "DW",
-      "is_free_tier": true,
-      "cpu_core_count": 1,
-      "data_storage_size_in_tbs": 1,
-      "license_model": "LICENSE_INCLUDED",
-      "db_version": "23ai"
+      "db_version": "19c"
     }
   ]
 }
+
