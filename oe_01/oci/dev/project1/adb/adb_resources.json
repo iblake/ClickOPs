@@ -4,7 +4,7 @@
       "name": "dgcadb",                    
       "compartment_ocid": "ocid1.compartment.oc1..xxxx", 
       "db_name": "dgcadb",                   
-      "display_name": "dgcadb",              
+      "display_name": "dgcadb2",              
       "db_workload": "OLTP",                 
       "db_version": "19.0.0",                
       "cpu_core_count": 1,                 
