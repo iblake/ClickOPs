@@ -21,16 +21,19 @@ jobs:
       - name: Detect Project Info
         id: detect
         run: |
+          # Buscar el primer archivo de JSON modificado
           CHANGED_FILE=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep 'oe_01/oci/dev/.*/adb/adb_resources.json' | head -1)
           if [ -z "$CHANGED_FILE" ]; then
             CHANGED_FILE=$(git diff --name-only origin/main ${{ github.sha }} | grep 'oe_01/oci/dev/.*/adb/adb_resources.json' | head -1)
           fi
           echo "CHANGED_FILE=$CHANGED_FILE" >> $GITHUB_ENV
-          # Extraer project (por ejemplo project1)
+          # Extraer el proyecto del path (asume estructura fija)
           PROJECT=$(echo "$CHANGED_FILE" | awk -F'/' '{print $5}')
+          ENVIRONMENT=$(echo "$CHANGED_FILE" | awk -F'/' '{print $4}')
           echo "PROJECT=$PROJECT" >> $GITHUB_ENV
-          echo "ADB_JSON=oe_01/oci/dev/$PROJECT/adb/adb_resources.json" >> $GITHUB_ENV
-          echo "TF_STATE_KEY=oe_01/oci/dev/$PROJECT/adb/terraform.tfstate" >> $GITHUB_ENV
+          echo "ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_ENV
+          echo "ADB_JSON=oe_01/oci/$ENVIRONMENT/$PROJECT/adb/adb_resources.json" >> $GITHUB_ENV
+          echo "TF_STATE_KEY=oe_01/oci/$ENVIRONMENT/$PROJECT/adb/terraform.tfstate" >> $GITHUB_ENV
           echo "TF_WORKING_DIR=catalog/OPS103_provision_adb" >> $GITHUB_ENV
 
       - name: Setup Terraform
@@ -44,7 +47,7 @@ jobs:
           terraform init -upgrade \
             -backend-config="bucket=${{ secrets.OCI_TF_STATE_BUCKET }}" \
             -backend-config="namespace=${{ secrets.OCI_TF_STATE_NAMESPACE }}" \
-            -backend-config="region=${{ secrets.OCI_REGION }}" \
+            -backend-config="region=${{ secrets.OCI_REGION || 'eu-frankfurt-1' }}" \
             -backend-config="key=${{ env.TF_STATE_KEY }}"
 
       - name: Terraform Validate & Format Check
