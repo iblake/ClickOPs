@@ -32,3 +32,8 @@ variable "adb_database_db_workload" {
   type        = string
   default     = "OLTP" # Options: OLTP, DW, AJD
 }
+
+variable "inputs_json_path" {
+  description = "Path to the input JSON describing the ADBs"
+  type        = string
+}

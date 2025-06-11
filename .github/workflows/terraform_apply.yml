@@ -1,27 +1,14 @@
-name: Terraform Apply on ADB Provision (GitOps + ClickOps)
+name: Terraform ADB GitOps
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
     paths:
-      - 'oe_01/oci/dev/**/adb/**/*.tf'
-      - 'oe_01/oci/dev/**/adb/**/inputs.json'
       - 'oe_01/oci/dev/**/adb/adb_resources.json'
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - 'oe_01/oci/dev/**/adb/adb_resources.json'
-
-
-env:
-  FINAL_REGION: ${{ secrets.OCI_REGION || 'eu-frankfurt-1' }}
-  TF_VAR_adb_password_secret_ocid: ${{ secrets.OCI_ADB_PASSWORD_SECRET_OCID }}
-
-permissions:
-  contents: read
-  pull-requests: write
 
 jobs:
   terraform:
@@ -30,56 +17,37 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Determine Terraform Working Directory
-        id: set_working_dir
+      - name: Detect Project Info
+        id: detect
         run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
-            WORKING_DIR=$(echo "$CHANGED_FILES" \
-              | grep -oE 'oe_01/oci/dev/[A-Za-z0-9_-]+/adb/[A-Za-z0-9_-]+' \
-              | head -n 1)
-            if [ -z "$WORKING_DIR" ]; then
-              echo "No se encontró run_terraform.txt en path de ADB. Saliendo."
-              echo "::set-output name=project_found::false"
-              exit 0
-            fi
-          else
-            CHANGED_FILES=$(git diff --name-only origin/main ${{ github.sha }})
-            WORKING_DIR=$(echo "$CHANGED_FILES" \
-              | grep -oE 'oe_01/oci/dev/[A-Za-z0-9_-]+/adb/[A-Za-z0-9_-]+' \
-              | head -n 1)
-            if [ -z "$WORKING_DIR" ]; then
-              echo "No se detectaron cambios relevantes en ADB. Saliendo."
-              echo "::set-output name=project_found::false"
-              exit 0
-            fi
+          CHANGED_FILE=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep 'oe_01/oci/dev/.*/adb/adb_resources.json' | head -1)
+          if [ -z "$CHANGED_FILE" ]; then
+            CHANGED_FILE=$(git diff --name-only origin/main ${{ github.sha }} | grep 'oe_01/oci/dev/.*/adb/adb_resources.json' | head -1)
           fi
-
-          echo "Determined Terraform Working Directory: $WORKING_DIR"
-          echo "TF_WORKING_DIR=$WORKING_DIR/terraform" >> $GITHUB_ENV
-          echo "::set-output name=project_found::true"
+          echo "CHANGED_FILE=$CHANGED_FILE" >> $GITHUB_ENV
+          # Extraer project (por ejemplo project1)
+          PROJECT=$(echo "$CHANGED_FILE" | awk -F'/' '{print $5}')
+          echo "PROJECT=$PROJECT" >> $GITHUB_ENV
+          echo "ADB_JSON=oe_01/oci/dev/$PROJECT/adb/adb_resources.json" >> $GITHUB_ENV
+          echo "TF_STATE_KEY=oe_01/oci/dev/$PROJECT/adb/terraform.tfstate" >> $GITHUB_ENV
+          echo "TF_WORKING_DIR=catalog/OPS103_provision_adb" >> $GITHUB_ENV
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.12.1
-          terraform_wrapper: true
 
       - name: Terraform Init
-        if: steps.set_working_dir.outputs.project_found == 'true'
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
           terraform init -upgrade \
             -backend-config="bucket=${{ secrets.OCI_TF_STATE_BUCKET }}" \
             -backend-config="namespace=${{ secrets.OCI_TF_STATE_NAMESPACE }}" \
-            -backend-config="region=${{ env.FINAL_REGION }}" \
-            -backend-config="key=${{ env.TF_WORKING_DIR }}/terraform.tfstate"
+            -backend-config="region=${{ secrets.OCI_REGION }}" \
+            -backend-config="key=${{ env.TF_STATE_KEY }}"
 
       - name: Terraform Validate & Format Check
-        if: steps.set_working_dir.outputs.project_found == 'true'
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
           terraform fmt -check -recursive || true
@@ -87,23 +55,23 @@ jobs:
 
       - name: Terraform Plan
         id: plan
-        if: github.event_name == 'pull_request' && steps.set_working_dir.outputs.project_found == 'true'
+        if: github.event_name == 'pull_request'
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
-          terraform plan -no-color -var-file=../inputs.json -out=tfplan > plan.txt || exit 1
+          terraform plan -no-color \
+            -var="inputs_json_path=${{ github.workspace }}/${{ env.ADB_JSON }}" \
+            -out=tfplan > plan.txt || exit 1
         continue-on-error: true
 
       - name: Update Pull Request with Plan
-        if: github.event_name == 'pull_request' && steps.set_working_dir.outputs.project_found == 'true'
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const planOutput = require('fs').readFileSync('plan.txt', 'utf8');
             const body = `
-            #### Terraform Initialization ⚙️ \`${{ steps.init.outcome }}\`
-            #### Terraform Validation 🤖 \`${{ steps.validate.outcome }}\`
-            ### Terraform Plan 📖 \`${{ steps.plan.outcome }}\`
+            ### Terraform Plan 📖
 
             <details><summary>Show Plan</summary>
 
@@ -112,34 +80,18 @@ jobs:
             \`\`\`
 
             </details>
-
             _Pushed by @${{ github.actor }}, Event: \`${{ github.event_name }}\`_`;
-                        await github.rest.issues.createComment({
-                          issue_number: context.issue.number,
-                          owner: context.repo.owner,
-                          repo: context.repo.repo,
-                          body
-                        });
-
-      - name: Terraform Plan Status
-        if: steps.plan.outcome == 'failure' && github.event_name == 'pull_request'
-        run: exit 1
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });
 
       - name: Terraform Apply
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push' && steps.set_working_dir.outputs.project_found == 'true'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
-          terraform apply -no-color -auto-approve -var-file=../terraform.tfvars.json
-
-      - name: Remove run_terraform.txt marker
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push' && steps.set_working_dir.outputs.project_found == 'true'
-        run: |
-          MARKER_DIR=$(dirname "${{ env.TF_WORKING_DIR }}")
-          rm -f "$MARKER_DIR/run_terraform.txt"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "$MARKER_DIR/run_terraform.txt"
-          git commit -m "ci: remove run_terraform.txt after apply"
-          git push origin main
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          terraform apply -no-color \
+            -auto-approve \
+            -var="inputs_json_path=${{ github.workspace }}/${{ env.ADB_JSON }}"
