@@ -1,0 +1,33 @@
+---
+- name: Start ADB by name using centralized JSON
+  hosts: localhost
+  gather_facts: false
+  vars:
+    adb_resources_json: "{{ playbook_dir }}/../../../oe_01/{{ provider }}/{{ environment }}/{{ project }}/adb/adb_resources.json"
+    adb_name: "{{ machine }}"
+  tasks:
+    - name: Load ADB resources JSON
+      community.general.read_json:
+        path: "{{ adb_resources_json }}"
+      register: adb_resources
+
+    - name: Find the selected ADB config by name
+      set_fact:
+        selected_adb: "{{ adb_resources.adbs | selectattr('name','equalto', adb_name) | list | first }}"
+
+    - name: Check if ADB was found
+      fail:
+        msg: "ADB named {{ adb_name }} not found in adb_resources.json"
+      when: selected_adb is not defined
+
+    # Aquí tu tarea real para arrancar la ADB usando selected_adb.ocid o los datos necesarios
+    - name: DEBUG - Muestra los datos encontrados
+      debug:
+        var: selected_adb
+
+    # Ejemplo de tarea OCI (adaptar con tus módulos OCI)
+    # - name: Start ADB instance
+    #   oci_database_autonomous_database:
+    #     compartment_id: "{{ selected_adb.compartment_id }}"
+    #     autonomous_database_id: "{{ selected_adb.ocid }}"
+    #     state: 'STARTED'

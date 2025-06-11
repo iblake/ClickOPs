@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" x-data="clickOpsApp()">
+<html lang="en" x-data="clickOpsApp()" x-init="init()">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -13,7 +13,6 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
   <style>
-    /* Animación sencilla para el contenedor principal */
     @keyframes fade-in {
       from { opacity: 0; transform: translateY(10px); }
       to   { opacity: 1; transform: translateY(0); }
@@ -123,13 +122,11 @@
           <select id="operation" x-model="operation" @change="loadDocs"
                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
             <option value="" disabled selected>-- Select Operation --</option>
-            <!-- Si estamos en modo provisión, pintamos solo operaciones de Terraform -->
             <template x-if="mode === 'provision'">
               <template x-for="op in ops.provision" :key="op.value">
                 <option :value="op.value" x-text="op.label"></option>
               </template>
             </template>
-            <!-- Si estamos en modo cambios, pintamos solo operaciones de Ansible -->
             <template x-if="mode === 'change'">
               <template x-for="op in ops.change" :key="op.value">
                 <option :value="op.value" x-text="op.label"></option>
@@ -232,13 +229,11 @@
         <p><strong>Provider:</strong> <span x-text="provider"></span></p>
         <p><strong>Environment:</strong> <span x-text="environment"></span></p>
         <p><strong>Project:</strong> <span x-text="project"></span></p>
-        <!-- Solo mostramos Machine (ADB) si estamos en modo 'change' -->
         <template x-if="mode === 'change'">
           <p><strong>ADB Identifier:</strong> <span x-text="machine"></span></p>
         </template>
         <p><strong>Operation:</strong> <span x-text="operation"></span></p>
 
-        <!-- Resumen de variables extra, según modo -->
         <template x-if="mode === 'provision'">
           <div>
             <p><strong>Compartment OCID:</strong> <span x-text="tf_vars.compartment"></span></p>
@@ -247,7 +242,6 @@
             <p><strong>Workload:</strong> <span x-text="tf_vars.db_workload"></span></p>
           </div>
         </template>
-
         <template x-if="mode === 'change'">
           <div>
             <p><strong>Extra Vars:</strong> <span x-text="ansible_vars.extra"></span></p>
@@ -273,7 +267,7 @@
     function clickOpsApp() {
       return {
         // --- Estado principal ---
-        mode: 'provision',      // 'provision' o 'change'
+        mode: 'provision',
         providers: [],
         environments: [],
         projects: [],
@@ -286,7 +280,6 @@
         crq: '',
         showModal: false,
 
-        // Variables extra para Terraform (ADB Free Tier)
         tf_vars: {
           compartment: '',
           db_name: '',
@@ -294,13 +287,11 @@
           db_workload: ''
         },
 
-        // Variables extra para Ansible
         ansible_vars: {
           extra: '',
           limit: ''
         },
 
-        // Definición de operaciones según modo
         ops: {
           provision: [
             { value: 'OPS103_provision_adb', label: 'Provision ADB Free Tier' }
@@ -311,7 +302,6 @@
           ]
         },
 
-        // --- Métodos de carga dinámica ---
         async fetchProviders() {
           const res = await fetch('/api/providers');
           this.providers = await res.json();
@@ -330,7 +320,7 @@
         async onEnvironmentChange() {
           this.project = '';
           this.machine = '';
-          this. projects = [];
+          this.projects = [];
           this.machines = [];
           if (!this.provider || !this.environment) return;
           const res = await fetch(`/api/projects/${this.provider}/${this.environment}`);
@@ -340,9 +330,20 @@
           this.machine = '';
           this.machines = [];
           if (!this.provider || !this.environment || !this.project) return;
-          // Cargamos las ADBs ya creadas como "máquinas" lógicas
-          const res = await fetch(`/api/machines/${this.provider}/${this.environment}/${this.project}`);
-          this.machines = await res.json();
+          if (this.mode === 'change') {
+            await this.fetchAdbsFromJson();
+          } else {
+            this.machines = [];
+          }
+        },
+        // Carga ADBs desde JSON centralizado (nuevo flujo)
+        async fetchAdbsFromJson() {
+          try {
+            const res = await fetch(`/api/adbs/${this.provider}/${this.environment}/${this.project}`);
+            this.machines = await res.json();
+          } catch (e) {
+            this.machines = [];
+          }
         },
         async loadDocs() {
           if (!this.operation) {
@@ -353,19 +354,18 @@
           const data = await res.json();
           document.getElementById("docsContent").innerHTML = marked.parse(data.content);
         },
-
-        // --- Cambio de modo (provision / change) ---
         setMode(newMode) {
           this.mode = newMode;
           this.operation = '';
           document.getElementById("docsContent").innerHTML = '';
           this.tf_vars = { compartment: '', db_name: '', admin_password: '', db_workload: '' };
           this.ansible_vars = { extra: '', limit: '' };
-          if (newMode === 'provision') {
-            this.machine = '';
+          this.machine = '';
+          this.machines = [];
+          if (newMode === 'change' && this.provider && this.environment && this.project) {
+            this.fetchAdbsFromJson();
           }
         },
-
         openConfirmModal() {
           if (!this.provider || !this.environment || !this.project || !this.operation || !this.crq) {
             alert("Please fill out all required fields.");
@@ -391,14 +391,11 @@
           }
           this.showModal = true;
         },
-
         async submitOperation() {
           this.showModal = false;
-
           if (this.mode === 'provision') {
             this.machine = this.project;
           }
-
           const formData = new FormData();
           formData.append("provider", this.provider);
           formData.append("environment", this.environment);
@@ -406,24 +403,20 @@
           formData.append("machine", this.machine);
           formData.append("operation", this.operation);
           formData.append("crq", this.crq);
-
           if (this.mode === 'provision') {
             formData.append("tf_compartment", this.tf_vars.compartment);
             formData.append("tf_db_name", this.tf_vars.db_name);
             formData.append("tf_admin_password", this.tf_vars.admin_password);
             formData.append("tf_db_workload", this.tf_vars.db_workload);
           }
-
           if (this.mode === 'change') {
             formData.append("ansible_extra_vars", this.ansible_vars.extra);
             formData.append("ansible_limit", this.ansible_vars.limit);
           }
-
           const res = await fetch("/launch", {
             method: "POST",
             body: formData
           });
-
           if (res.ok) {
             alert("Operation submitted!");
             this.provider = '';
@@ -443,7 +436,6 @@
             alert("There was a problem launching the operation.");
           }
         },
-
         init() {
           this.fetchProviders();
         }

@@ -1,0 +1,32 @@
+{
+  "adbs": [
+    {
+      "name": "adb1",
+      "compartment_id": "ocid1.compartment.oc1..aaaaaaa...",
+      "cpu_core_count": 1,
+      "data_storage_size_in_tbs": 1,
+      "admin_password": "ChangeMe123!",
+      "db_name": "adb1db",
+      "db_workload": "OLTP",
+      "license_model": "LICENSE_INCLUDED",
+      "is_free_tier": false,
+      "tags": {
+        "Project": "ClickOps"
+      }
+    },
+    {
+      "name": "adb2",
+      "compartment_id": "ocid1.compartment.oc1..bbbbbbb...",
+      "cpu_core_count": 2,
+      "data_storage_size_in_tbs": 1,
+      "admin_password": "ChangeMe123!",
+      "db_name": "adb2db",
+      "db_workload": "OLTP",
+      "license_model": "LICENSE_INCLUDED",
+      "is_free_tier": false,
+      "tags": {
+        "Project": "ClickOps"
+      }
+    }
+  ]
+}
