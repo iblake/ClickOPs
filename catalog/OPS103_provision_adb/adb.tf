@@ -3,8 +3,8 @@ locals {
 }
 
 module "adb" {
-  source  = "oracle-devrel/oci-arch-adb/oci"
-  version = "2.0.0"
+  source  = "github.com/oracle-devrel/terraform-oci-arch-adb//modules/adb"
+  # version = "v2.0.0"      # Solo puedes fijar una versión si usas el registry público, pero aquí puedes hacer checkout a una rama/commit.
 
   # Cada ADB definido en el JSON se despliega como un recurso
   for_each = { for adb in local.adb_resources.adbs : adb.name => adb }
