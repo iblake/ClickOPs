@@ -1,9 +1,0 @@
-{
-  "adb_password_secret_ocid": "ocid1.vaultsecret.oc1.eu-frankfurt-1.amaaaaaattkvkkiaqxs4uflbjszn3nvhfxcoyxwamtk637znsyfu6wtbyx7q",
-  "compartment_ocid": "ocid1.compartment.oc1..aaaaaaaaoqn77wyhkn3crracqfaqg3pyoo5243snf4dtvhroohl5sp6hd5fq",
-  "region": "eu-frankfurt-1",
-  "adb_database_db_name": "DGC5",
-  "adb_database_display_name": "DGC5",
-  "adb_database_db_workload": "AJD",
-  "adb_database_db_version": "19c"
-}

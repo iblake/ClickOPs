@@ -127,16 +127,16 @@ async def launch(
         data = load_adbs_json(adb_json_path)
         new_adb = {
             "name": tf_db_name,
-            "compartment_id": tf_compartment,
+            "compartment_ocid": tf_compartment,
             "cpu_core_count": 1,
             "data_storage_size_in_tbs": 1,
-            "admin_password": tf_admin_password,
+            "adb_password": tf_admin_password,
             "db_name": tf_db_name,
             "db_workload": tf_db_workload,
+            "db_version": "19.0.0",
             "is_free_tier": True,
             "display_name": tf_db_name,
-            "license_model": "LICENSE_INCLUDED",
-            "tags": {}
+            "license_model": "LICENSE_INCLUDED"
         }
         data["adbs"] = [adb for adb in data["adbs"] if adb["name"] != tf_db_name]
         data["adbs"].append(new_adb)
