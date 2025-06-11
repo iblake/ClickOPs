@@ -1,8 +1,8 @@
 {
   "adbs": [
     {
-      "display_name": "dgcADB",
-      "db_name": "dgcADB",
+      "display_name": "dgcADB1",
+      "db_name": "dgcADB1",
       "admin_password": "SuperSecret123!",
       "cpu_core_count": 1,
       "data_storage_size_in_tbs": 1,
