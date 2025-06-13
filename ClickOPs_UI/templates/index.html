@@ -8,304 +8,142 @@
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
-    @keyframes fade-in { from { opacity: 0; transform: translateY(10px);} to { opacity: 1; transform: translateY(0);} }
+    @keyframes fade-in { from {opacity:0;transform:translateY(10px);} to {opacity:1;transform:translateY(0);} }
     .fade-in { animation: fade-in 0.3s ease-out forwards; }
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
 
   <div class="bg-white rounded-xl shadow-lg w-full max-w-3xl fade-in overflow-hidden">
+
+    <!-- HEADER -->
     <div class="bg-blue-600 px-6 py-4">
       <h1 class="text-white text-xl font-semibold">🚀 ClickOps Operation Launcher</h1>
     </div>
-    <div class="p-6 space-y-6">
-      <div class="flex justify-center space-x-4">
-        <button
-          :class="mode === 'provision' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'"
-          @click="setMode('provision')"
-          class="px-4 py-2 rounded-md transition"
-        >Provisión (Terraform)</button>
-        <button
-          :class="mode === 'change' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'"
-          @click="setMode('change')"
-          class="px-4 py-2 rounded-md transition"
-        >Cambios (Ansible)</button>
-      </div>
-      <form @submit.prevent="openConfirmModal" class="space-y-6">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <!-- Provider -->
-          <div>
-            <label for="provider" class="block text-sm font-medium text-gray-700">Cloud Provider</label>
-            <select id="provider" x-model="provider" @change="onProviderChange"
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
-              <option value="" disabled selected>-- Select Provider --</option>
-              <template x-for="prov in providers" :key="prov">
-                <option :value="prov" x-text="prov"></option>
-              </template>
-            </select>
-          </div>
-          <!-- Environment -->
-          <div x-show="provider" x-cloak>
-            <label for="environment" class="block text-sm font-medium text-gray-700">Environment</label>
-            <select id="environment" x-model="environment" @change="onEnvironmentChange"
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
-              <option value="" disabled selected>-- Select Environment --</option>
-              <template x-for="env in environments" :key="env">
-                <option :value="env" x-text="env"></option>
-              </template>
-            </select>
-          </div>
-          <!-- Project -->
-          <div x-show="environment" x-cloak>
-            <label for="project" class="block text-sm font-medium text-gray-700">Project</label>
-            <select id="project" x-model="project" @change="onProjectChange"
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
-              <option value="" disabled selected>-- Select Project --</option>
-              <template x-for="proj in projects" :key="proj">
-                <option :value="proj" x-text="proj"></option>
-              </template>
-            </select>
-          </div>
-          <!-- Machine (ADB) solo en modo 'change' -->
-          <div x-show="mode === 'change' && project" x-cloak>
-            <label for="machine" class="block text-sm font-medium text-gray-700">ADB Identifier</label>
-            <select id="machine" x-model="machine" @change="onMachineChange"
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
-              <option value="" disabled selected>-- Select ADB --</option>
-              <template x-for="m in machines" :key="m">
-                <option :value="m" x-text="m"></option>
-              </template>
-            </select>
-            <p class="text-xs text-gray-500 mt-1">Selecciona la ADB creada anteriormente.</p>
-            <!-- OCID visible aquí -->
-            <div x-show="selected_ocid" class="text-xs text-blue-700 mt-1 break-all">
-              <b>OCID:</b> <span x-text="selected_ocid"></span>
-            </div>
-          </div>
-          <!-- CRQ -->
-          <div class="sm:col-span-2">
-            <label for="crq" class="block text-sm font-medium text-gray-700">CRQ (Change Request ID)</label>
-            <input type="text" id="crq" x-model="crq" placeholder="e.g. CRQ123456"
-                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                   required>
-          </div>
-        </div>
-        <!-- Operación -->
-        <div class="space-y-1">
-          <label for="operation" class="block text-sm font-medium text-gray-700">Operation</label>
-          <select id="operation" x-model="operation" @change="loadDocs"
-                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
-            <option value="" disabled selected>-- Select Operation --</option>
-            <template x-if="mode === 'provision'">
-              <template x-for="op in ops.provision" :key="op.value">
-                <option :value="op.value" x-text="op.label"></option>
-              </template>
-            </template>
-            <template x-if="mode === 'change'">
-              <template x-for="op in ops.change" :key="op.value">
-                <option :value="op.value" x-text="op.label"></option>
-              </template>
+
+    <!-- MODO TOGGLE -->
+    <div class="flex justify-center space-x-4 mt-6 mb-4">
+      <button type="button"
+        :class="mode === 'provision' ? 'bg-blue-700 text-white' : 'bg-blue-100 text-blue-700'"
+        class="px-4 py-2 rounded-md transition font-semibold"
+        @click="setMode('provision')"
+      >Provisión (Terraform)</button>
+      <button type="button"
+        :class="mode === 'change' ? 'bg-blue-700 text-white' : 'bg-blue-100 text-blue-700'"
+        class="px-4 py-2 rounded-md transition font-semibold"
+        @click="setMode('change')"
+      >Cambios (Ansible)</button>
+    </div>
+
+    <!-- FORMULARIO PRINCIPAL -->
+    <form @submit.prevent="openConfirmModal" class="p-6 space-y-6">
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <!-- Cloud Provider -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Cloud Provider</label>
+          <select x-model="provider" @change="onProviderChange"
+                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+            <option value="" disabled selected>-- Select Provider --</option>
+            <template x-for="prov in providers" :key="prov">
+              <option :value="prov" x-text="prov"></option>
             </template>
           </select>
         </div>
-        <!-- Variables extra (provisión) -->
-        <div x-show="mode === 'provision' && operation" x-cloak class="space-y-4 pt-4 border-t border-gray-200">
-          <h2 class="text-lg font-semibold text-gray-800">Variables Terraform (ADB Free Tier)</h2>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label for="tf_compartment" class="block text-sm font-medium text-gray-700">Compartment OCID</label>
-              <input type="text" id="tf_compartment" x-model="tf_vars.compartment"
-                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                     placeholder="ocid1.compartment.oc1..xxxx" required>
-            </div>
-            <div>
-              <label for="tf_db_name" class="block text-sm font-medium text-gray-700">ADB Name</label>
-              <input type="text" id="tf_db_name" x-model="tf_vars.db_name"
-                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                     placeholder="e.g. myadb1" required>
-            </div>
-            <div>
-              <label for="tf_admin_password" class="block text-sm font-medium text-gray-700">Admin Password</label>
-              <input type="password" id="tf_admin_password" x-model="tf_vars.admin_password"
-                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                     placeholder="********" required>
-            </div>
-            <div>
-              <label for="tf_db_workload" class="block text-sm font-medium text-gray-700">Workload Type</label>
-              <select id="tf_db_workload" x-model="tf_vars.db_workload"
-                      class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                      required>
-                <option value="" disabled selected>-- Select Workload --</option>
-                <option value="OLTP">OLTP</option>
-                <option value="DW">DW</option>
-              </select>
-            </div>
-          </div>
+
+        <!-- Environment -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Environment</label>
+          <select x-model="environment" @change="onEnvironmentChange"
+                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+            <option value="" disabled selected>-- Select Environment --</option>
+            <template x-for="env in environments" :key="env">
+              <option :value="env" x-text="env"></option>
+            </template>
+          </select>
         </div>
-        <!-- Variables extra (ansible) -->
-        <div x-show="mode === 'change' && operation" x-cloak class="space-y-4 pt-4 border-t border-gray-200">
-          <h2 class="text-lg font-semibold text-gray-800">Variables de Ansible</h2>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label for="ansible_extra_vars" class="block text-sm font-medium text-gray-700">Extra Vars (JSON)</label>
-              <textarea id="ansible_extra_vars" x-model="ansible_vars.extra"
-                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                        rows="3"
-                        placeholder='{"adb_compartment": "ocid1.compartment...", "adb_ocid": "ocid1.autonomousdatabase..."}'></textarea>
+
+        <!-- Project -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Project</label>
+          <select x-model="project" @change="onProjectChange"
+                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+            <option value="" disabled selected>-- Select Project --</option>
+            <template x-for="proj in projects" :key="proj">
+              <option :value="proj" x-text="proj"></option>
+            </template>
+          </select>
+        </div>
+
+        <!-- ADB (solo en cambios) -->
+        <div x-show="mode === 'change' && project" x-cloak>
+          <label class="block text-sm font-medium text-gray-700">ADB Identifier</label>
+          <select x-model="machine" @change="onMachineChange"
+                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+            <option value="" disabled selected>-- Select ADB --</option>
+            <template x-for="adb in adbs" :key="adb.id">
+              <option :value="adb.id" x-text="adb.display_name"></option>
+            </template>
+          </select>
+          <p class="text-xs text-gray-500 mt-1">Selecciona la ADB creada anteriormente.</p>
+          <!-- Datos extra de la ADB seleccionada -->
+          <template x-if="selectedAdb">
+            <div class="mt-2 text-xs bg-gray-50 p-2 rounded border">
+              <div><strong>OCID:</strong> <span x-text="selectedAdb.ocid"></span></div>
+              <div><strong>Workload:</strong> <span x-text="selectedAdb.workload"></span></div>
+              <div><strong>Version:</strong> <span x-text="selectedAdb.db_version"></span></div>
+              <div><strong>Compartment:</strong> <span x-text="selectedAdb.compartment"></span></div>
             </div>
-            <div>
-              <label for="ansible_limit" class="block text-sm font-medium text-gray-700">Limit Hosts</label>
-              <input type="text" id="ansible_limit" x-model="ansible_vars.limit"
-                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                     placeholder="e.g. localhost" />
-              <p class="text-xs text-gray-500 mt-1">Usa “localhost” para Ansible local.</p>
-            </div>
-          </div>
+          </template>
         </div>
-        <!-- Documentación -->
-        <div x-show="operation" x-cloak class="pt-4">
-          <label class="block text-sm font-medium text-gray-700">Documentation</label>
-          <div id="docsContent" class="prose max-w-none bg-gray-50 p-4 rounded border"></div>
-        </div>
-        <div class="flex justify-center pt-4">
-          <button type="submit"
-                  class="inline-flex items-center px-6 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition">
-            Launch Operation
-          </button>
-        </div>
-      </form>
-    </div>
+      </div>
+
+      <!-- CRQ -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700">CRQ (Change Request ID)</label>
+        <input type="text" x-model="crq"
+               placeholder="e.g. CRQ123456"
+               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required>
+      </div>
+
+      <!-- Operación -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Operation</label>
+        <select x-model="operation" @change="loadDocs"
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+          <option value="" disabled selected>-- Select Operation --</option>
+          <template x-if="mode === 'provision'">
+            <template x-for="op in ops.provision" :key="op.value">
+              <option :value="op.value" x-text="op.label"></option>
+            </template>
+          </template>
+          <template x-if="mode === 'change'">
+            <template x-for="op in ops.change" :key="op.value">
+              <option :value="op.value" x-text="op.label"></option>
+            </template>
+          </template>
+        </select>
+      </div>
+
+      <!-- DOCS -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Documentation</label>
+        <textarea readonly id="docsContent"
+                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-50"></textarea>
+      </div>
+
+      <!-- BOTÓN -->
+      <div class="flex justify-center pt-4">
+        <button type="submit"
+                class="inline-flex items-center px-6 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition">
+          Launch Operation
+        </button>
+      </div>
+    </form>
   </div>
 
-  <!-- Alpine.js y la lógica del componente -->
-  <script>
-    function clickOpsApp() {
-      return {
-        mode: 'provision',
-        provider: '', environment: '', project: '', machine: '', operation: '', crq: '',
-        providers: [], environments: [], projects: [], machines: [],
-        tf_vars: { compartment: '', db_name: '', admin_password: '', db_workload: '' },
-        ansible_vars: { extra: '', limit: '' },
-        ops: {
-          provision: [{ value: 'OPS103_provision_adb', label: 'Provision ADB Free Tier' }],
-          change: [{ value: 'OPS105_ADB_START', label: 'Start ADB' }, { value: 'OPS106_ADB_STOP', label: 'Stop ADB' }]
-        },
-        deployed_adbs: {},
-        selected_ocid: '',
-
-        async fetchProviders() {
-          this.providers = await (await fetch('/api/providers')).json();
-        },
-        async onProviderChange() {
-          this.environment = this.project = this.machine = '';
-          this.selected_ocid = '';
-          this.environments = this.projects = this.machines = [];
-          if (!this.provider) return;
-          this.environments = await (await fetch(`/api/environments/${this.provider}`)).json();
-        },
-        async onEnvironmentChange() {
-          this.project = this.machine = '';
-          this.selected_ocid = '';
-          this.projects = this.machines = [];
-          if (!this.provider || !this.environment) return;
-          this.projects = await (await fetch(`/api/projects/${this.provider}/${this.environment}`)).json();
-        },
-        async onProjectChange() {
-          this.machine = '';
-          this.selected_ocid = '';
-          if (!this.provider || !this.environment || !this.project) return;
-          if (this.mode === 'change') {
-            await this.fetchDeployedAdbs();
-          } else {
-            this.machines = [];
-          }
-        },
-        async fetchDeployedAdbs() {
-          try {
-            const res = await fetch(`/api/deployed_adbs/${this.provider}/${this.environment}/${this.project}`);
-            const data = await res.json();
-            this.deployed_adbs = data || {};
-            this.machines = Object.keys(this.deployed_adbs);
-          } catch (e) {
-            this.deployed_adbs = {};
-            this.machines = [];
-          }
-        },
-        onMachineChange() {
-          this.selected_ocid = this.deployed_adbs[this.machine]?.ocid || '';
-        },
-        async loadDocs() {
-          const el = document.getElementById("docsContent");
-          if (!this.operation) { el.innerHTML = ''; return; }
-          const res = await fetch(`/api/docs/${this.operation}`);
-          const data = await res.json();
-          el.innerHTML = marked.parse(data.content);
-        },
-        setMode(newMode) {
-          this.mode = newMode;
-          this.operation = '';
-          document.getElementById("docsContent").innerHTML = '';
-          this.tf_vars = { compartment: '', db_name: '', admin_password: '', db_workload: '' };
-          this.ansible_vars = { extra: '', limit: '' };
-          this.machine = ''; this.machines = [];
-          this.selected_ocid = '';
-          if (newMode === 'change' && this.provider && this.environment && this.project) this.fetchDeployedAdbs();
-        },
-        resetForm() {
-          this.provider = this.environment = this.project = this.machine = this.operation = this.crq = '';
-          this.environments = this.projects = this.machines = [];
-          this.tf_vars = { compartment: '', db_name: '', admin_password: '', db_workload: '' };
-          this.ansible_vars = { extra: '', limit: '' };
-          this.selected_ocid = '';
-          document.getElementById("docsContent").innerHTML = '';
-        },
-        openConfirmModal() {
-          if (!this.provider || !this.environment || !this.project || !this.operation || !this.crq)
-            return alert("Please fill out all required fields.");
-          if (this.mode === 'provision' && Object.values(this.tf_vars).some(v => !v.trim()))
-            return alert("Please complete all ADB variables before continuing.");
-          if (this.mode === 'change') {
-            if (!this.machine.trim())
-              return alert("Please select an existing ADB to start or stop.");
-            if (!this.ansible_vars.extra.trim())
-              return alert("Please provide Extra Vars (compartment + adb_ocid).");
-          }
-          this.showModal = true;
-        },
-        async submitOperation() {
-          this.showModal = false;
-          if (this.mode === 'provision') this.machine = this.project;
-          const formData = new FormData();
-          formData.append("provider", this.provider);
-          formData.append("environment", this.environment);
-          formData.append("project", this.project);
-          formData.append("machine", this.machine);
-          formData.append("operation", this.operation);
-          formData.append("crq", this.crq);
-          if (this.mode === 'provision') {
-            formData.append("tf_compartment", this.tf_vars.compartment);
-            formData.append("tf_db_name", this.tf_vars.db_name);
-            formData.append("tf_admin_password", this.tf_vars.admin_password);
-            formData.append("tf_db_workload", this.tf_vars.db_workload);
-          }
-          if (this.mode === 'change') {
-            formData.append("ansible_extra_vars", this.ansible_vars.extra);
-            formData.append("ansible_limit", this.ansible_vars.limit);
-          }
-          const res = await fetch("/launch", { method: "POST", body: formData });
-          if (res.ok) {
-            alert("Operation submitted!");
-            this.resetForm();
-            this.fetchProviders();
-          } else {
-            alert("There was a problem launching the operation.");
-          }
-        },
-        init() { this.fetchProviders(); },
-        showModal: false,
-      }
-    }
-    document.addEventListener("alpine:init", () => { Alpine.data("clickOpsApp", clickOpsApp); });
-  </script>
+  <!-- SCRIPTS -->
+  <script src="/static/clickops.js"></script>
 </body>
 </html>
+

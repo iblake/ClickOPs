@@ -269,11 +269,14 @@ async def launch(
 
 @app.get("/api/deployed_adbs/{provider}/{environment}/{project}")
 def api_deployed_adbs(provider: str, environment: str, project: str):
-    deployed_path = REPO_ROOT / f"oe_01/{provider}/{environment}/{project}/adb/deployed_adbs.json"
-    if not deployed_path.exists():
-        return JSONResponse({}, status_code=200)  # No error, solo objeto vacío si no existe
+    deployed_json = (
+        REPO_ROOT / f"oe_01/{provider}/{environment}/{project}/adb/deployed_adbs.json"
+    )
+    if not deployed_json.exists():
+        return JSONResponse({})
     try:
-        with open(deployed_path, "r") as f:
+        with open(deployed_json, "r") as f:
             return JSONResponse(json.load(f))
-    except Exception:
-        return JSONResponse({}, status_code=200)
+    except Exception as e:
+        print("Error loading deployed_adbs.json:", e)
+        return JSONResponse({})
