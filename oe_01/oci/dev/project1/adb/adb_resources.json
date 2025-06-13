@@ -11,7 +11,17 @@
       "data_storage_size_in_tbs": 1,
       "license_model": "LICENSE_INCLUDED",
       "db_version": "19c"
+    },
+    {
+      "display_name": "dgc1",
+      "compartment_ocid": "ocid1.compartment.oc1..aaaaaaaaoqn77wyhkn3crracqfaqg3pyoo5243snf4dtvhroohl5sp6hd5fq",
+      "admin_password": "dev123",
+      "db_workload": "OLTP",
+      "is_free_tier": true,
+      "cpu_core_count": 1,
+      "data_storage_size_in_tbs": 1,
+      "license_model": "LICENSE_INCLUDED",
+      "db_version": "19c"
     }
   ]
 }
-
