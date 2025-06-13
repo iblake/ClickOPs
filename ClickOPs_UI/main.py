@@ -138,7 +138,7 @@ async def launch(
             "display_name": tf_db_name,
             "license_model": "LICENSE_INCLUDED"
         }
-        data["adbs"] = [adb for adb in data["adbs"] if adb["name"] != tf_db_name]
+        data["adbs"] = [adb for adb in data.get("adbs", []) if adb.get("name") != tf_db_name]
         data["adbs"].append(new_adb)
         save_adbs_json(adb_json_path, data)
 
