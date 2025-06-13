@@ -109,3 +109,16 @@ jobs:
             -var="compartment_ocid=${{ secrets.OCI_ADB_COMPARTMENT_OCID }}" \
             -var="region=${{ secrets.OCI_REGION }}"
 
+      - name: Save ADBs outputs as JSON
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          OUTFILE="${{ github.workspace }}/${{ env.ADB_JSON }}"
+          OUTDIR=$(dirname "$OUTFILE")
+          OUTPUT_JSON="$OUTDIR/deployed_adbs.json"
+          terraform output -json deployed_adbs > "$OUTPUT_JSON"
+          git config --global user.email "github-actions@nomail"
+          git config --global user.name "github-actions"
+          git add "$OUTPUT_JSON"
+          git commit -m "Update deployed_adbs.json"
+          git push || true

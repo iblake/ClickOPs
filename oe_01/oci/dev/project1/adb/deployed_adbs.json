@@ -1,0 +1,24 @@
+{
+  "my-adb-1": {
+    "ocid": "ocid1.autonomousdatabase.oc1..xxxxx",
+    "display_name": "dgcADB1",
+    "compartment": "ocid1.compartment.oc1..aaaaaaaaoqn77wyhkn3crracqfaqg3pyoo5243snf4dtvhroohl5sp6hd5fq",
+    "workload": "OLTP",
+    "free_tier": true,
+    "db_version": "19c",
+    "cpu_cores": 1,
+    "storage_tbs": 1,
+    "license_model": "LICENSE_INCLUDED"
+  },
+  "my-adb-2": {
+    "ocid": "ocid1.autonomousdatabase.oc1..zzzzz",
+    "display_name": "dgcADB2",
+    "compartment": "ocid1.compartment.oc1..aaaaaaaaoqn77wyhkn3crracqfaqg3pyoo5243snf4dtvhroohl5sp6hd5fq",
+    "workload": "DW",
+    "free_tier": true,
+    "db_version": "19c",
+    "cpu_cores": 1,
+    "storage_tbs": 1,
+    "license_model": "LICENSE_INCLUDED"
+  }
+}

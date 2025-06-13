@@ -71,17 +71,14 @@ def api_envs(provider: str, request: Request):
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
-
     base = REPO_ROOT / f"oe_01/{provider}"
     all_envs = get_subdirs(base)
-
     if user == "admindev":
         allowed_envs = [e for e in all_envs if e == "dev"]
     elif user == "adminpro":
         allowed_envs = [e for e in all_envs if e == "prod"]
     else:
         allowed_envs = []
-
     return JSONResponse(allowed_envs)
 
 @app.get("/api/projects/{provider}/{env}")
@@ -93,7 +90,8 @@ def api_projects(provider: str, env: str):
 def api_adbs(provider: str, environment: str, project: str):
     adb_json_path = REPO_ROOT / f"oe_01/{provider}/{environment}/{project}/adb/adb_resources.json"
     data = load_adbs_json(adb_json_path)
-    return JSONResponse([adb.get("name", "") for adb in data.get("adbs", [])])
+    # ¡Aquí usamos display_name!
+    return JSONResponse([adb.get("display_name", "") for adb in data.get("adbs", [])])
 
 @app.get("/api/docs/{operation}")
 def read_docs(operation: str):
@@ -122,92 +120,54 @@ async def launch(
     if not user:
         return RedirectResponse(url="/login", status_code=303)
 
-    # Limpieza básica para evitar espacios en blanco
-    provider = provider.strip()
-    environment = environment.strip()
-    project = project.strip()
-    crq = crq.strip()
-    if machine:
-        machine = machine.strip()
-    if tf_compartment:
-        tf_compartment = tf_compartment.strip()
-    if tf_db_name:
-        tf_db_name = tf_db_name.strip()
-    if tf_admin_password:
-        tf_admin_password = tf_admin_password.strip()
-    if tf_db_workload:
-        tf_db_workload = tf_db_workload.strip()
-    if ansible_extra_vars:
-        ansible_extra_vars = ansible_extra_vars.strip()
-    if ansible_limit:
-        ansible_limit = ansible_limit.strip()
-
-    print(f"Launch called by user={user} with operation={operation}")
-    print(f"provider={provider}, environment={environment}, project={project}, machine={machine}, crq={crq}")
-
-    # --- PROVISION ADB ---
+    # PROVISION ADB (Terraform)
     if operation == "OPS103_provision_adb":
         if not (tf_compartment and tf_db_name and tf_admin_password and tf_db_workload):
             return JSONResponse({"error": "Faltan variables Terraform para ADB"}, status_code=400)
-
         adb_json_path = REPO_ROOT / f"oe_01/{provider}/{environment}/{project}/adb/adb_resources.json"
         adb_json_path.parent.mkdir(parents=True, exist_ok=True)
-
         os.chdir(str(REPO_ROOT))
-
         try:
             subprocess.run(["git", "stash"], check=False)
             subprocess.run(["git", "checkout", "main"], check=True)
             subprocess.run(["git", "pull"], check=True)
         except subprocess.CalledProcessError as e:
             return JSONResponse({"error": f"Git operation failed: {e}"}, status_code=500)
-
         branch_name = f"crq-{crq}-provision-{tf_db_name}"
         try:
             subprocess.run(["git", "checkout", "-b", branch_name], check=True)
         except subprocess.CalledProcessError as e:
             return JSONResponse({"error": f"Git checkout branch failed: {e}"}, status_code=500)
-
         data = load_adbs_json(adb_json_path)
-        print("Current ADBs:", data.get("adbs", []))
-
+        # --- SOLO CAMPOS SOPORTADOS POR EL MÓDULO ---
         new_adb = {
-            "name": tf_db_name,
+            "display_name": tf_db_name,
             "compartment_ocid": tf_compartment,
+            "admin_password": tf_admin_password,
+            "db_workload": tf_db_workload,
+            "is_free_tier": True,
             "cpu_core_count": 1,
             "data_storage_size_in_tbs": 1,
-            "adb_password": tf_admin_password,
-            "db_name": tf_db_name,
-            "db_workload": tf_db_workload,
-            "db_version": "19.0.0",
-            "is_free_tier": True,
-            "display_name": tf_db_name,
-            "license_model": "LICENSE_INCLUDED"
+            "license_model": "LICENSE_INCLUDED",
+            "db_version": "19c"
         }
-        data["adbs"] = [adb for adb in data.get("adbs", []) if adb.get("name") != tf_db_name]
+        data["adbs"] = [adb for adb in data.get("adbs", []) if adb.get("display_name") != tf_db_name]
         data["adbs"].append(new_adb)
         save_adbs_json(adb_json_path, data)
-
-        print("ADBs after update:", data.get("adbs", []))
-
         rel_path = adb_json_path.relative_to(REPO_ROOT)
         try:
             subprocess.run(["git", "add", str(rel_path)], check=True)
         except subprocess.CalledProcessError as e:
             return JSONResponse({"error": f"Git add failed: {e}"}, status_code=500)
-
         status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
-        print("Git status output:", status.stdout)
         if not status.stdout.strip():
             return JSONResponse({"info": "ADB JSON already up-to-date. No commit created."}, status_code=200)
-
         commit_msg = f"{crq}: Update ADB JSON with {tf_db_name} on {provider}/{environment}/{project}"
         try:
             subprocess.run(["git", "commit", "-m", commit_msg], check=True)
             subprocess.run(["git", "push", "-u", "origin", branch_name], check=True)
         except subprocess.CalledProcessError as e:
             return JSONResponse({"error": f"Git commit or push failed: {e}"}, status_code=500)
-
         pr_title = f"{crq} - Add or Update ADB {tf_db_name}"
         pr_body = (
             f"User **{user}** requested provisioning or update of ADB **{tf_db_name}** in:\n"
@@ -226,21 +186,18 @@ async def launch(
                 "--base", "main",
                 "--fill"
             ], capture_output=True, text=True)
-            print("GH PR create output:", result.stdout)
             if result.returncode != 0:
                 print("GH PR create error:", result.stderr)
         except Exception as e:
             print("Exception running gh pr create:", e)
-
         return RedirectResponse(url="/", status_code=303)
 
-    # --- START/STOP ADB ---
+    # START/STOP ADB (Ansible)
     if operation in ("OPS105_ADB_START", "OPS106_ADB_STOP"):
         if not machine:
             return JSONResponse({"error": "ADB name is required to start/stop."}, status_code=400)
         if not ansible_extra_vars:
             return JSONResponse({"error": "Faltan variables Ansible"}, status_code=400)
-
         adb_dir = REPO_ROOT / f"oe_01/{provider}/{environment}/{project}/adb"
         adb_dir.mkdir(parents=True, exist_ok=True)
         extra_vars_file = adb_dir / f"{machine}_extra_vars.yml"
@@ -250,9 +207,7 @@ async def launch(
                 yaml.dump(extra_dict, f)
         except Exception as e:
             print(f"Error saving ansible extra vars YAML: {e}")
-
         import_line = f"- import_playbook: catalog/OPS105_ADB_START_STOP/{'adb_start.yml' if operation == 'OPS105_ADB_START' else 'adb_stop.yml'}\n"
-
         os.chdir(str(REPO_ROOT))
         try:
             subprocess.run(["git", "stash"], check=False)
@@ -262,7 +217,6 @@ async def launch(
             subprocess.run(["git", "checkout", "-b", branch_name], check=True)
         except subprocess.CalledProcessError as e:
             return JSONResponse({"error": f"Git operation failed: {e}"}, status_code=500)
-
         MASTER_FILE = REPO_ROOT / "master.yml"
         if not MASTER_FILE.exists():
             MASTER_FILE.write_text(import_line)
@@ -271,24 +225,20 @@ async def launch(
             if import_line not in content_lines:
                 with open(MASTER_FILE, "a") as f:
                     f.write(import_line)
-
         try:
             subprocess.run(["git", "add", "master.yml"], check=True)
             subprocess.run(["git", "add", str(extra_vars_file)], check=True)
         except subprocess.CalledProcessError as e:
             return JSONResponse({"error": f"Git add failed: {e}"}, status_code=500)
-
         status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
         if not status.stdout.strip():
             return JSONResponse({"info": "No changes to commit for this ADB operation."}, status_code=200)
-
         commit_msg = f"{crq}: {operation} on {provider}/{environment}/{project}/{machine}"
         try:
             subprocess.run(["git", "commit", "-m", commit_msg], check=True)
             subprocess.run(["git", "push", "-u", "origin", branch_name], check=True)
         except subprocess.CalledProcessError as e:
             return JSONResponse({"error": f"Git commit or push failed: {e}"}, status_code=500)
-
         pr_title = f"{crq} - {operation} on {project}/{machine}"
         pr_body = (
             f"User **{user}** requested `{operation}` on:\n"
@@ -309,12 +259,21 @@ async def launch(
                 "--base", "main",
                 "--fill"
             ], capture_output=True, text=True)
-            print("GH PR create output:", result.stdout)
             if result.returncode != 0:
                 print("GH PR create error:", result.stderr)
         except Exception as e:
             print("Exception running gh pr create:", e)
-
         return RedirectResponse(url="/", status_code=303)
 
     return RedirectResponse(url="/", status_code=303)
+
+@app.get("/api/deployed_adbs/{provider}/{environment}/{project}")
+def api_deployed_adbs(provider: str, environment: str, project: str):
+    deployed_path = REPO_ROOT / f"oe_01/{provider}/{environment}/{project}/adb/deployed_adbs.json"
+    if not deployed_path.exists():
+        return JSONResponse({}, status_code=200)  # No error, solo objeto vacío si no existe
+    try:
+        with open(deployed_path, "r") as f:
+            return JSONResponse(json.load(f))
+    except Exception:
+        return JSONResponse({}, status_code=200)

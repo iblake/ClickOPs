@@ -2,8 +2,8 @@ from fastapi import Response, Request
 
 # Usuarios hardcodeados con contraseña y entorno asignado
 USERS = {
-    "admindev": {"password": "devpass123", "env": "dev"},
-    "adminpro": {"password": "propass123", "env": "prod"},
+    "admindev": {"password": "demo", "env": "dev"},
+    "adminpro": {"password": "demo", "env": "prod"},
 }
 
 # Sesiones en memoria simple (solo para demo)
