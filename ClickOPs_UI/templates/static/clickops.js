@@ -91,7 +91,11 @@ function clickOpsApp() {
         formData.append("ansible_extra_vars", this.ansible_vars.extra);
         formData.append("ansible_limit", this.ansible_vars.limit);
       }
-      const res = await fetch("/launch", { method: "POST", body: formData });
+      const res = await fetch("/launch", {
+        method: "POST",
+        body: formData,
+        credentials: "include"  // <- Esto permite enviar la cookie de sesión
+      });
       if (res.ok) {
         alert("Operation submitted!");
         this.resetForm();
